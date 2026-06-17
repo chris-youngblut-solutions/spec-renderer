@@ -1,0 +1,71 @@
+# example-app-env.form.yaml — a proof spec: a web-app .env intake form, authored
+# by hand in the documented format. Nothing about it is config-forge-specific —
+# it exercises the same engine with a brand-new schema and zero engine changes.
+"$schema": "https://json-schema.org/draft/2020-12/schema"
+type: "object"
+x-forge-kind: "form"
+x-forge-name: "webapp-env"
+title: "Web app environment"
+x-forge-outputs: ["env", "json"]
+x-forge-groups:
+  - id: "server"
+    title: "Server"
+  - id: "database"
+    title: "Database"
+    note: "Connection + pool sizing."
+  - id: "auth"
+    title: "Auth & secrets"
+required: ["PORT", "DATABASE_URL", "SESSION_SECRET", "JWT_SECRET", "ADMIN_EMAIL"]
+properties:
+  NODE_ENV:
+    type: "string"
+    enum: ["development", "production", "test"]
+    default: "production"
+    status: "default"
+    group: "server"
+  PORT:
+    type: "integer"
+    title: "Port"
+    default: "3000"
+    status: "fill"
+    group: "server"
+  HOST:
+    type: "string"
+    format: "ipv4"
+    default: "0.0.0.0"
+    status: "default"
+    group: "server"
+  LOG_LEVEL:
+    type: "string"
+    enum: ["debug", "info", "warn", "error"]
+    default: "info"
+    status: "default"
+    group: "server"
+  DATABASE_URL:
+    type: "string"
+    format: "uri"
+    title: "Database URL"
+    description: "e.g. postgres://user@host:5432/db"
+    status: "fill"
+    group: "database"
+  DB_POOL_MAX:
+    type: "integer"
+    default: "10"
+    status: "default"
+    group: "database"
+  SESSION_SECRET:
+    type: "string"
+    title: "Session secret"
+    secret: true
+    status: "fill"
+    group: "auth"
+  JWT_SECRET:
+    type: "string"
+    secret: true
+    status: "fill"
+    group: "auth"
+  ADMIN_EMAIL:
+    type: "string"
+    format: "email"
+    status: "fill"
+    group: "auth"

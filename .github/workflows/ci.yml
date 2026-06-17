@@ -1,0 +1,70 @@
+# Base CI scaffold. Per-language overlays add a `lang` job alongside
+# `preflight`. The merge gate is: every job in this file passes.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Cancel in-progress runs for the same ref when a new push lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    # Universal floor: pre-commit on all files. Defined inline (rather than
+    # via `uses: ./.github/workflows/_reusable.yml`) so the base CI is
+    # self-contained when a repo doesn't ship _reusable.yml.
+    name: pre-commit
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29  # v4.1.7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Cache pre-commit
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4.2.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Install pre-commit
+        run: pip install --upgrade pip pre-commit
+
+      - name: Run pre-commit on all files
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  # Per-language overlay appends a job here:
+  #
+  # lang:
+  #   needs: preflight
+  #   runs-on: ubuntu-24.04
+  #   steps: ...
+
+  node:
+    name: node tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29  # v4.1.7
+        with:
+          persist-credentials: false
+      - name: Node version
+        run: node --version
+      - name: Tests (no deps — node:test + node:vm)
+        run: node --test tests/*.test.mjs

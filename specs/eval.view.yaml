@@ -1,0 +1,58 @@
+# eval.view.yaml — agentic-eval-harness eval-dashboard, re-expressed as a
+# spec-renderer VIEW spec. Compiles (with the harness data bundle) to a
+# self-contained eval-dashboard.html that renders identically to the original.
+kind: view
+x-forge-name: eval-dashboard
+title: "agentic-eval-harness"
+adapters: [eval-scoring]
+footer: "Renders <a href=\"https://github.com/in-loop/agentic-eval-harness\">agentic-eval-harness</a> JSON (scorecards + transcripts). The harness is the source of truth for all metrics and scoring."
+views:
+  - key: overview
+    label: "Overview"
+    select: {domain: true, run: after, case: false}
+    widgets:
+      - widget: heading
+        value: "$domain"
+      - widget: chips
+        source: card
+        fields: [run_id, backend, model]
+      - widget: stat-cards
+        cards:
+          - value: "eval-scoring.passedCount(card)"
+            denom: "{card.cases.length}"
+            label: "cases passed"
+          - value: "eval-scoring.totalScore(card)"
+            denom: "{card.cases.length}"
+            label: "total score"
+      - widget: hard-gate-banner
+        source: "eval-scoring.hardGateFailures(card)"
+      - widget: metric-rollup
+        source: "eval-scoring.byMetric(card)"
+      - widget: case-table
+        source: card
+  - key: diff
+    label: "Regression diff"
+    select: {domain: true, run: both, case: false}
+    widgets:
+      - widget: heading
+        value: "Regression diff"
+      - widget: regression-diff
+        before: before
+        after: after
+  - key: transcript
+    label: "Transcript"
+    select: {domain: true, run: after, case: true}
+    widgets:
+      - widget: heading
+        value: "Transcript"
+      - widget: transcript
+        source: transcript
+  - key: cross
+    label: "Cross-domain"
+    select: {domain: false, run: false, case: false}
+    widgets:
+      - widget: heading
+        value: "Cross-domain"
+      - widget: caption
+        text: "Latest run per domain — one engine, N domains."
+      - widget: cross-grid

@@ -1,0 +1,177 @@
+[
+  {
+    "name": "empty input -> null",
+    "inputYaml": "",
+    "expectedJson": "null"
+  },
+  {
+    "name": "comments + blank lines only -> null",
+    "inputYaml": "# just a comment\n\n  # indented comment\n",
+    "expectedJson": "null"
+  },
+  {
+    "name": "flat map, string values",
+    "inputYaml": "name: vrtx-bootstrap\ntitle: Dell VRTX bootstrap",
+    "expectedJson": "{\"name\":\"vrtx-bootstrap\",\"title\":\"Dell VRTX bootstrap\"}"
+  },
+  {
+    "name": "scalar typing: int, float, bool, null, string",
+    "inputYaml": "count: 3\nratio: 1.5\nenabled: true\ndisabled: false\nempty: null\ntilde: ~\nword: hello",
+    "expectedJson": "{\"count\":3,\"ratio\":1.5,\"enabled\":true,\"disabled\":false,\"empty\":null,\"tilde\":null,\"word\":\"hello\"}"
+  },
+  {
+    "name": "quoted string is never coerced (the danger case)",
+    "inputYaml": "vlan: \"10\"\nflag: \"true\"\nnothing: \"null\"\nblank: \"\"",
+    "expectedJson": "{\"vlan\":\"10\",\"flag\":\"true\",\"nothing\":\"null\",\"blank\":\"\"}"
+  },
+  {
+    "name": "bare 10 is a number but quoted stays string",
+    "inputYaml": "a: 10\nb: \"10\"",
+    "expectedJson": "{\"a\":10,\"b\":\"10\"}"
+  },
+  {
+    "name": "leading-zero token stays string (version/octal safety)",
+    "inputYaml": "build: 007\nmask: 0755\nzero: 0\nneg: -5",
+    "expectedJson": "{\"build\":\"007\",\"mask\":\"0755\",\"zero\":0,\"neg\":-5}"
+  },
+  {
+    "name": "colon inside value (url) is not a separator",
+    "inputYaml": "endpoint: http://10.0.30.60:9090\ntime: \"10:30\"",
+    "expectedJson": "{\"endpoint\":\"http://10.0.30.60:9090\",\"time\":\"10:30\"}"
+  },
+  {
+    "name": "nested map",
+    "inputYaml": "server:\n  host: localhost\n  port: 8080",
+    "expectedJson": "{\"server\":{\"host\":\"localhost\",\"port\":8080}}"
+  },
+  {
+    "name": "empty value -> null",
+    "inputYaml": "key:\nother: x",
+    "expectedJson": "{\"key\":null,\"other\":\"x\"}"
+  },
+  {
+    "name": "sequence of scalars at key column (idiomatic)",
+    "inputYaml": "options:\n- Enabled\n- Disabled",
+    "expectedJson": "{\"options\":[\"Enabled\",\"Disabled\"]}"
+  },
+  {
+    "name": "sequence of scalars indented under key",
+    "inputYaml": "options:\n  - Enabled\n  - Disabled",
+    "expectedJson": "{\"options\":[\"Enabled\",\"Disabled\"]}"
+  },
+  {
+    "name": "list-of-maps (the groups/fields shape)",
+    "inputYaml": "fields:\n  - key: CMC_IP\n    type: ipv4\n  - key: CMC_VLAN_ID\n    type: int",
+    "expectedJson": "{\"fields\":[{\"key\":\"CMC_IP\",\"type\":\"ipv4\"},{\"key\":\"CMC_VLAN_ID\",\"type\":\"int\"}]}"
+  },
+  {
+    "name": "deeply nested groups->fields with mixed types",
+    "inputYaml": "groups:\n  - id: p1\n    fields:\n      - key: CMC_VLAN_ID\n        default: \"10\"\n        secret: false\n      - key: CMC_PASS\n        secret: true",
+    "expectedJson": "{\"groups\":[{\"id\":\"p1\",\"fields\":[{\"key\":\"CMC_VLAN_ID\",\"default\":\"10\",\"secret\":false},{\"key\":\"CMC_PASS\",\"secret\":true}]}]}"
+  },
+  {
+    "name": "flow sequence inline",
+    "inputYaml": "options: [Enabled, Disabled]",
+    "expectedJson": "{\"options\":[\"Enabled\",\"Disabled\"]}"
+  },
+  {
+    "name": "flow sequence with quoted + numbers",
+    "inputYaml": "opts: [\"Enabled\", \"Disabled\"]\nnums: [1, 2, 3]",
+    "expectedJson": "{\"opts\":[\"Enabled\",\"Disabled\"],\"nums\":[1,2,3]}"
+  },
+  {
+    "name": "flow map inline",
+    "inputYaml": "point: {x: 1, y: two}",
+    "expectedJson": "{\"point\":{\"x\":1,\"y\":\"two\"}}"
+  },
+  {
+    "name": "empty flow collections",
+    "inputYaml": "a: []\nb: {}",
+    "expectedJson": "{\"a\":[],\"b\":{}}"
+  },
+  {
+    "name": "nested flow",
+    "inputYaml": "grid: [[1, 2], [3, 4]]\nwrap: {list: [a, b]}",
+    "expectedJson": "{\"grid\":[[1,2],[3,4]],\"wrap\":{\"list\":[\"a\",\"b\"]}}"
+  },
+  {
+    "name": "inline comment stripped from bare scalar, kept in quote",
+    "inputYaml": "a: value   # trailing comment\nb: \"value # not a comment\"",
+    "expectedJson": "{\"a\":\"value\",\"b\":\"value # not a comment\"}"
+  },
+  {
+    "name": "hash not a comment without leading space",
+    "inputYaml": "color: \"#fff\"\ntag: a#b",
+    "expectedJson": "{\"color\":\"#fff\",\"tag\":\"a#b\"}"
+  },
+  {
+    "name": "literal block scalar preserves newlines",
+    "inputYaml": "note: |\n  line one\n  line two",
+    "expectedJson": "{\"note\":\"line one\\nline two\\n\"}"
+  },
+  {
+    "name": "literal block scalar strip chomp",
+    "inputYaml": "note: |-\n  only line",
+    "expectedJson": "{\"note\":\"only line\"}"
+  },
+  {
+    "name": "folded block scalar joins with spaces",
+    "inputYaml": "desc: >\n  wrapped text\n  continues here",
+    "expectedJson": "{\"desc\":\"wrapped text continues here\\n\"}"
+  },
+  {
+    "name": "folded block scalar blank line = newline",
+    "inputYaml": "desc: >\n  para one\n\n  para two",
+    "expectedJson": "{\"desc\":\"para one\\npara two\\n\"}"
+  },
+  {
+    "name": "double-quote escapes",
+    "inputYaml": "s: \"tab\\there\\nnext\"",
+    "expectedJson": "{\"s\":\"tab\\there\\nnext\"}"
+  },
+  {
+    "name": "single-quote literal with doubled-quote escape",
+    "inputYaml": "s: 'it''s fine'\nt: 'no \\n escape'",
+    "expectedJson": "{\"s\":\"it's fine\",\"t\":\"no \\\\n escape\"}"
+  },
+  {
+    "name": "quoted key with colon inside",
+    "inputYaml": "\"a: b\": v\nplain: w",
+    "expectedJson": "{\"a: b\":\"v\",\"plain\":\"w\"}"
+  },
+  {
+    "name": "top-level sequence document",
+    "inputYaml": "- one\n- two\n- 3",
+    "expectedJson": "[\"one\",\"two\",3]"
+  },
+  {
+    "name": "frontmatter doc-start --- then map",
+    "inputYaml": "---\nname: spec\nversion: 2026-06-17",
+    "expectedJson": "{\"name\":\"spec\",\"version\":\"2026-06-17\"}"
+  },
+  {
+    "name": "duplicate key last wins",
+    "inputYaml": "k: 1\nk: 2",
+    "expectedJson": "{\"k\":2}"
+  },
+  {
+    "name": "nested seq of seq (list of lists)",
+    "inputYaml": "matrix:\n  - - 1\n    - 2\n  - - 3",
+    "expectedJson": "{\"matrix\":[[1,2],[3]]}"
+  },
+  {
+    "name": "empty seq item -> null",
+    "inputYaml": "items:\n  - a\n  -\n  - c",
+    "expectedJson": "{\"items\":[\"a\",null,\"c\"]}"
+  },
+  {
+    "name": "float scientific + signed",
+    "inputYaml": "a: 1e3\nb: -2.5\nc: +4",
+    "expectedJson": "{\"a\":1000,\"b\":-2.5,\"c\":4}"
+  },
+  {
+    "name": "runs-style list of path strings (eval-manifest shape)",
+    "inputYaml": "runs:\n  - eval/generic/history/run-live.json\n  - eval/generic/history/run-replay.json",
+    "expectedJson": "{\"runs\":[\"eval/generic/history/run-live.json\",\"eval/generic/history/run-replay.json\"]}"
+  }
+]

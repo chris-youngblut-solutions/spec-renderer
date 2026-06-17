@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en" data-cabin="day">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>spec-renderer</title>
+<style>
+/*__ENGINE_CSS__*/
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="caret">^</span>spec-renderer<span class="sub" id="subtitle"></span></div>
+  <nav class="tabs" id="tabs"></nav>
+  <div class="pickers" id="pickers"></div>
+  <button class="ghost" id="themeBtn">night</button>
+</header>
+<main>
+  <div id="loader" class="card">
+    <div class="drop" id="drop">drop a spec (<code>.yaml</code> / <code>.json</code> / <code>.md</code>) or data file here ·
+      <label class="link">browse<input id="file" type="file" multiple accept=".yaml,.yml,.json,.jsonl,.md" hidden></label></div>
+    <details><summary>paste a spec</summary>
+      <textarea id="paste" placeholder="paste YAML / JSON / markdown-with-frontmatter spec"></textarea>
+      <button class="ghost" id="pasteBtn">load</button></details>
+  </div>
+  <div id="view"></div>
+</main>
+<div class="bar" id="bar" style="display:none"></div>
+<footer id="foot"></footer>
+<!-- The embedded spec + optional data carry id/type attributes that the engine
+     reads. The engine's logic lives in the single ATTRIBUTE-LESS script element
+     below; the test harness extracts that one by matching an attribute-less tag,
+     so these attributed data tags are skipped. (Keep this comment free of literal
+     script tokens so it is not mistaken for that attribute-less element.) -->
+<script id="embedded-spec" type="application/json"></script>
+<script id="embedded-data" type="application/json"></script>
+<script>
+/*__ENGINE_JS__*/
+</script>
+</body>
+</html>

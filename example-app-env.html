@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en" data-cabin="day">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>spec-renderer</title>
+<style>
+/* spec-renderer engine styles.
+   in^loop Cabin theme tokens — vendored from the in^loop design system
+   (panel-tiling/design-system/cabin.css). Fonts fall back to system stacks:
+   no @import, so the file is offline / CSP-clean / single-artifact.
+   Lifted verbatim from eval-dashboard so compiled views render identically. */
+:root, [data-cabin="day"] {
+  --cabin-paper:#EDE3CF; --cabin-paper-2:#E4D8BE; --cabin-paper-3:#D9C9A8; --cabin-paper-inset:#F4ECDA;
+  --cabin-ink:#2A1F18; --cabin-ink-2:#4A3828; --cabin-ink-3:#6B5340; --cabin-ink-4:#9A8770;
+  --cabin-rule:rgba(60,30,15,0.10); --cabin-rule-2:rgba(60,30,15,0.18); --cabin-rule-strong:rgba(60,30,15,0.28);
+  --cabin-accent:#B85A3E; --cabin-accent-deep:#8E4530; --cabin-accent-soft:rgba(184,90,62,0.14); --cabin-accent-wash:rgba(184,90,62,0.06);
+  --cabin-ok:#5F6B3D; --cabin-warn:#C28A3A; --cabin-danger:#A8523C; --cabin-info:#6B7F8F;
+}
+[data-cabin="night"] {
+  --cabin-paper:#14181B; --cabin-paper-2:#1A1F22; --cabin-paper-3:#21272B; --cabin-paper-inset:#1E2428;
+  --cabin-ink:#ECE3CF; --cabin-ink-2:#C9BFA8; --cabin-ink-3:#8E8470; --cabin-ink-4:#5C544A;
+  --cabin-rule:rgba(220,210,190,0.08); --cabin-rule-2:rgba(220,210,190,0.16); --cabin-rule-strong:rgba(220,210,190,0.28);
+  --cabin-accent:#D97757; --cabin-accent-deep:#B85A3E; --cabin-accent-soft:rgba(217,119,87,0.16); --cabin-accent-wash:rgba(217,119,87,0.06);
+  --cabin-ok:#8a9a5b; --cabin-warn:#d6a24f; --cabin-danger:#c8694f; --cabin-info:#8fa3b3;
+}
+:root {
+  --font-serif:'Iowan Old Style','Palatino Linotype',Georgia,serif;
+  --font-sans:-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  --font-mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--cabin-paper);color:var(--cabin-ink);
+  font:15px/1.5 var(--font-sans);-webkit-font-smoothing:antialiased}
+header{position:sticky;top:0;z-index:5;background:var(--cabin-paper);
+  border-bottom:1px solid var(--cabin-rule);padding:14px 22px;display:flex;
+  gap:16px 22px;align-items:center;flex-wrap:wrap}
+.brand{font-family:var(--font-serif);font-size:20px;font-weight:400;letter-spacing:-.01em}
+.brand .caret{color:var(--cabin-accent);font-weight:600;margin-right:2px}
+.brand .sub{color:var(--cabin-ink-3);font-size:14px;font-family:var(--font-sans)}
+nav.tabs{display:flex;gap:4px;margin-left:6px}
+.tab{padding:5px 12px;border-radius:999px;border:1px solid transparent;cursor:pointer;
+  font-size:13px;color:var(--cabin-ink-2);background:transparent}
+.tab:hover{background:var(--cabin-paper-2)}
+.tab.on{background:var(--cabin-accent-soft);border-color:var(--cabin-accent);color:var(--cabin-ink)}
+.pickers{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.pickers label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--cabin-ink-3);
+  display:flex;flex-direction:column;gap:3px}
+input,select{background:var(--cabin-paper-inset);color:var(--cabin-ink);border:1px solid var(--cabin-rule-2);
+  border-radius:7px;padding:6px 8px;font:13px var(--font-mono);max-width:280px}
+input:focus,select:focus{outline:0;border-color:var(--cabin-accent)}
+button{background:var(--cabin-accent);color:var(--cabin-paper-inset);border:0;border-radius:7px;
+  padding:7px 13px;font-weight:600;font-size:13px;cursor:pointer}
+button.ghost{background:transparent;color:var(--cabin-ink-2);border:1px solid var(--cabin-rule-2)}
+button.ghost:hover{border-color:var(--cabin-accent);color:var(--cabin-ink)}
+button:disabled{opacity:.4;cursor:default}
+main{max-width:1040px;margin:0 auto;padding:22px}
+.card{background:var(--cabin-paper-inset);border:1px solid var(--cabin-rule);border-radius:12px;
+  padding:18px 20px;margin:14px 0;box-shadow:0 1px 2px rgba(0,0,0,0.04)}
+.row{display:flex;gap:18px;align-items:baseline;flex-wrap:wrap}
+.chip{font-size:11px;font-family:var(--font-mono);padding:2px 8px;border-radius:999px;
+  border:1px solid var(--cabin-rule-2);color:var(--cabin-ink-3)}
+.big{font-family:var(--font-serif);font-size:34px;line-height:1}
+.muted{color:var(--cabin-ink-3)}
+.micro{font-size:12px;color:var(--cabin-ink-3)}
+h2.view-h{font-family:var(--font-serif);font-weight:400;font-size:24px;margin:6px 0 2px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.ok{color:var(--cabin-ok)} .bad{color:var(--cabin-danger)} .warn{color:var(--cabin-warn)} .info{color:var(--cabin-info)}
+.bg-ok{background:var(--cabin-ok)} .bg-bad{background:var(--cabin-danger)} .bg-warn{background:var(--cabin-warn)} .bg-info{background:var(--cabin-info)} .bg-accent{background:var(--cabin-accent)}
+.banner{border-radius:10px;padding:11px 14px;margin:10px 0;font-size:14px;border:1px solid}
+.banner.fail{background:var(--cabin-accent-soft);border-color:var(--cabin-danger);color:var(--cabin-ink)}
+.banner.pass{background:transparent;border-color:var(--cabin-rule-2);color:var(--cabin-ink-3)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--cabin-rule)}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--cabin-ink-3);font-weight:600}
+td.num{font-family:var(--font-mono);text-align:right}
+tr.regressed td{background:var(--cabin-accent-wash)}
+.metric-row{display:grid;grid-template-columns:240px 70px 1fr;gap:12px;align-items:center;padding:6px 0}
+.metric-row .name{font-family:var(--font-mono);font-size:13px}
+.link{color:var(--cabin-accent-deep);cursor:pointer;text-decoration:none}
+.link:hover{text-decoration:underline}
+/* transcript / timeline */
+.turn{border-left:2px solid var(--cabin-rule-2);padding:2px 0 2px 14px;margin:12px 0}
+.turn.assistant{border-color:var(--cabin-accent-soft)}
+.turn.user{border-color:var(--cabin-rule-2)}
+.turn .who{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--cabin-ink-4);margin-bottom:4px}
+.blk{margin:7px 0}
+.blk.text{color:var(--cabin-ink-2);font-style:italic}
+.toolcall,.toolresult{background:var(--cabin-paper-3);border:1px solid var(--cabin-rule);border-radius:8px;padding:8px 11px}
+.toolcall .name{font-family:var(--font-mono);font-weight:600;color:var(--cabin-accent-deep)}
+.toolresult.err{border-color:var(--cabin-danger)}
+.toolresult .tag,.toolcall .arrow{font-size:11px;color:var(--cabin-ink-3);text-transform:uppercase;letter-spacing:.06em}
+.submit{background:var(--cabin-accent-soft);border:1px solid var(--cabin-accent)}
+.submit .name{color:var(--cabin-ink)}
+pre{font-family:var(--font-mono);font-size:12px;line-height:1.5;background:transparent;margin:4px 0 0;
+  white-space:pre-wrap;word-break:break-word;color:var(--cabin-ink-2)}
+/* loader */
+.drop{border:1.5px dashed var(--cabin-rule-2);border-radius:10px;padding:22px;text-align:center;color:var(--cabin-ink-3)}
+.drop.hot{border-color:var(--cabin-accent);color:var(--cabin-ink)}
+details summary{cursor:pointer;color:var(--cabin-ink-3);font-size:13px}
+textarea{width:100%;min-height:90px;margin-top:8px;background:var(--cabin-paper-inset);color:var(--cabin-ink);
+  border:1px solid var(--cabin-rule-2);border-radius:7px;padding:8px;font:12px var(--font-mono)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+footer{max-width:1040px;margin:0 auto;padding:8px 22px 40px;color:var(--cabin-ink-4);font-size:12px}
+footer a{color:var(--cabin-accent-deep)}
+/* ---- FORM widgets (Phase 1) — re-themed onto Cabin tokens ---- */
+.field{display:grid;grid-template-columns:1fr 320px;gap:14px 22px;padding:11px 0;border-top:1px solid var(--cabin-rule)}
+.field:first-of-type{border-top:0}
+.field .key{font-family:var(--font-mono);font-weight:600;color:var(--cabin-ink)}
+.field .label{color:var(--cabin-ink-2);font-size:13px}
+.field .help{color:var(--cabin-ink-3);font-size:12px;font-style:italic}
+.field input,.field select{width:100%;max-width:none}
+.badge{font-size:10px;font-family:var(--font-mono);padding:1px 7px;border-radius:999px;margin-left:8px;
+  text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--cabin-rule-2)}
+.b-known{color:var(--cabin-ok);border-color:var(--cabin-ok)}
+.b-default{color:var(--cabin-info);border-color:var(--cabin-info)}
+.b-fill{color:var(--cabin-warn);border-color:var(--cabin-warn)}
+.field.req input,.field.req select{border-color:var(--cabin-warn)}
+.field.invalid input,.field.invalid select{border-color:var(--cabin-danger)}
+.field.scoped{opacity:.5}
+.field.scoped .label{text-decoration:line-through}
+.err{color:var(--cabin-danger);font-size:12px;margin-top:4px}
+.group-title{font-family:var(--font-serif);font-size:18px;font-weight:400;margin:0 0 2px}
+.note{color:var(--cabin-ink-3);font-size:13px;margin:2px 0 8px}
+.bar{position:sticky;bottom:0;background:var(--cabin-paper);border-top:1px solid var(--cabin-rule-2);
+  padding:11px 22px;display:flex;gap:12px;align-items:center}
+.bar .count{margin-right:auto;color:var(--cabin-ink-3);font-size:13px}
+a.dl{color:var(--cabin-accent-deep)}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="caret">^</span>spec-renderer<span class="sub" id="subtitle"></span></div>
+  <nav class="tabs" id="tabs"></nav>
+  <div class="pickers" id="pickers"></div>
+  <button class="ghost" id="themeBtn">night</button>
+</header>
+<main>
+  <div id="loader" class="card">
+    <div class="drop" id="drop">drop a spec (<code>.yaml</code> / <code>.json</code> / <code>.md</code>) or data file here ·
+      <label class="link">browse<input id="file" type="file" multiple accept=".yaml,.yml,.json,.jsonl,.md" hidden></label></div>
+    <details><summary>paste a spec</summary>
+      <textarea id="paste" placeholder="paste YAML / JSON / markdown-with-frontmatter spec"></textarea>
+      <button class="ghost" id="pasteBtn">load</button></details>
+  </div>
+  <div id="view"></div>
+</main>
+<div class="bar" id="bar" style="display:none"></div>
+<footer id="foot"></footer>
+<!-- The embedded spec + optional data carry id/type attributes that the engine
+     reads. The engine's logic lives in the single ATTRIBUTE-LESS script element
+     below; the test harness extracts that one by matching an attribute-less tag,
+     so these attributed data tags are skipped. (Keep this comment free of literal
+     script tokens so it is not mistaken for that attribute-less element.) -->
+<script id="embedded-spec" type="application/json">{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","x-forge-kind":"form","x-forge-name":"webapp-env","title":"Web app environment","x-forge-outputs":["env","json"],"x-forge-groups":[{"id":"server","title":"Server"},{"id":"database","title":"Database","note":"Connection + pool sizing."},{"id":"auth","title":"Auth & secrets"}],"required":["PORT","DATABASE_URL","SESSION_SECRET","JWT_SECRET","ADMIN_EMAIL"],"properties":{"NODE_ENV":{"type":"string","enum":["development","production","test"],"default":"production","status":"default","group":"server"},"PORT":{"type":"integer","title":"Port","default":"3000","status":"fill","group":"server"},"HOST":{"type":"string","format":"ipv4","default":"0.0.0.0","status":"default","group":"server"},"LOG_LEVEL":{"type":"string","enum":["debug","info","warn","error"],"default":"info","status":"default","group":"server"},"DATABASE_URL":{"type":"string","format":"uri","title":"Database URL","description":"e.g. postgres://user@host:5432/db","status":"fill","group":"database"},"DB_POOL_MAX":{"type":"integer","default":"10","status":"default","group":"database"},"SESSION_SECRET":{"type":"string","title":"Session secret","secret":true,"status":"fill","group":"auth"},"JWT_SECRET":{"type":"string","secret":true,"status":"fill","group":"auth"},"ADMIN_EMAIL":{"type":"string","format":"email","status":"fill","group":"auth"}}}</script>
+<script id="embedded-data" type="application/json"></script>
+<script>
+/* =====================================================================
+ * spec-renderer engine  —  one engine, two kinds (form | view)
+ *
+ * Classic script (NO import/export): inlined verbatim by compile-spec.mjs
+ * into the single attribute-less <script> of a compiled output, AND loaded
+ * under node:vm by the tests. Pure functions are exposed via module.exports
+ * (guarded); boot() runs only when a document is present. This dual-runtime
+ * shape is what keeps the YAML parser byte-identical author-time vs runtime.
+ *
+ * Sections:
+ *   1. YAML-subset parser   (parseYaml / parseFrontmatter)
+ *   2. Spec envelope        (parseSpecText / parseEnvelope / validateEnvelope)
+ *   3. Shell                ($ / el / esc / fmt / theme / storage / loaders)
+ *   4. FORM renderer        (Phase 1 — stub)
+ *   5. VIEW renderer        (Phase 2 — stub)
+ *   6. Adapter registry     (Phase 2 — stub)
+ *   7. Boot + exports
+ * ===================================================================== */
+"use strict";
+
+/* =====================================================================
+ * 1. YAML-SUBSET PARSER
+ *    Supported: block maps/seqs, nesting, scalar typing (str/num/bool/null),
+ *    single/double quotes, comments, block scalars (| > with -/+ chomp),
+ *    single-line flow ([..] {..}), and `---` frontmatter. Out of scope:
+ *    anchors/aliases, tags, merge keys, complex keys, multi-doc, flow over
+ *    multiple lines, explicit block-indent indicators. Tabs in indentation
+ *    are a hard error. Quoted scalars are NEVER coerced (the escape hatch
+ *    for "10"/"true"/"" travelling as strings).
+ * ===================================================================== */
+
+function yamlErr(line, msg) {
+  return new Error("YAML line " + (typeof line === "number" ? line : "?") + ": " + msg);
+}
+function yamlStripBom(t) {
+  return t.charCodeAt(0) === 0xfeff ? t.slice(1) : t;
+}
+
+function parseYaml(text) {
+  const lines = yamlPreprocess(String(text));
+  const recs = yamlLex(lines);
+  if (yamlSkipBlank(recs, 0) >= recs.length) return null;
+  const [val] = yamlParseBlock(recs, 0, -1);
+  return val;
+}
+
+function parseFrontmatter(text) {
+  const t = yamlStripBom(String(text)).replace(/\r\n?/g, "\n");
+  const m = /^[ \t]*\n?---[ \t]*\n([\s\S]*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)/.exec("\n" + t);
+  if (!m) return { data: {}, body: t, hasFrontmatter: false };
+  const data = parseYaml(m[1]);
+  return { data: data == null ? {} : data, body: t.slice(m[0].length - 1), hasFrontmatter: true };
+}
+
+function yamlPreprocess(text) {
+  text = yamlStripBom(text).replace(/\r\n?/g, "\n");
+  const arr = text.split("\n");
+  let s = 0;
+  while (s < arr.length && arr[s].trim() === "") s++;
+  if (arr[s] !== undefined && arr[s].trim() === "---") s++; // leading doc-start marker
+  const out = [];
+  for (let i = s; i < arr.length; i++) {
+    if (arr[i].trim() === "..." || arr[i].trim() === "---") {
+      if (arr[i].trim() === "---") throw yamlErr(i + 1, "multi-document streams are not supported");
+      break; // `...` terminates the document
+    }
+    out.push(arr[i]);
+  }
+  return out;
+}
+
+function yamlLex(lines) {
+  const recs = [];
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    if (/^[ ]*\t/.test(raw)) throw yamlErr(i + 1, "tab in indentation");
+    const indent = raw.length - raw.replace(/^ +/, "").length;
+    const body = raw.slice(indent);
+    if (body === "" || body[0] === "#") {
+      recs.push({ raw, indent, blank: true, line: i + 1 });
+      continue;
+    }
+    if (/^[!&*%]/.test(body) || /^\? /.test(body)) {
+      throw yamlErr(i + 1, "unsupported construct (anchor/alias/tag/directive/complex-key)");
+    }
+    let kind = "scalar";
+    if (body === "-" || body.startsWith("- ")) kind = "seq";
+    else if (yamlFindSep(body) >= 0) kind = "map";
+    recs.push({ raw, indent, body, kind, blank: false, line: i + 1 });
+  }
+  return recs;
+}
+
+function yamlSkipBlank(recs, i) {
+  while (i < recs.length && recs[i].blank) i++;
+  return i;
+}
+
+/* index of the key/value separator (`: ` or trailing `:`), quote+flow aware */
+function yamlFindSep(body) {
+  let i = 0, q = null, depth = 0;
+  while (i < body.length) {
+    const c = body[i];
+    if (q) {
+      if (c === q) {
+        if (q === "'" && body[i + 1] === "'") { i += 2; continue; }
+        q = null;
+      }
+      i++; continue;
+    }
+    if (c === '"' || c === "'") { q = c; i++; continue; }
+    if (c === "[" || c === "{") { depth++; i++; continue; }
+    if (c === "]" || c === "}") { depth--; i++; continue; }
+    if (c === ":" && depth === 0) {
+      const n = body[i + 1];
+      if (n === undefined || n === " " || n === "\t") return i;
+    }
+    i++;
+  }
+  return -1;
+}
+
+function yamlSplitKeyValue(body, line) {
+  const idx = yamlFindSep(body);
+  if (idx < 0) throw yamlErr(line, "expected 'key: value'");
+  const key = yamlCoerceKey(body.slice(0, idx).trim(), line);
+  const rest = body.slice(idx + 1).trim();
+  return { key, rest };
+}
+
+function yamlCoerceKey(raw, line) {
+  if (raw[0] === '"' || raw[0] === "'") return yamlParseQuoted(raw, line).value;
+  return raw; // keys are always strings, never coerced
+}
+
+function yamlParseBlock(recs, i, parentIndent) {
+  i = yamlSkipBlank(recs, i);
+  if (i >= recs.length || recs[i].indent <= parentIndent) return [null, i];
+  const blockIndent = recs[i].indent;
+  if (recs[i].kind === "seq") return yamlParseSeq(recs, i, blockIndent);
+  if (recs[i].kind === "map") return yamlParseMap(recs, i, blockIndent);
+  return [yamlScalarOrFlow(recs[i].body, recs[i].line), i + 1]; // standalone scalar doc
+}
+
+function yamlParseMap(recs, i, ind) {
+  const obj = Object.create(null); // a `__proto__` spec key becomes inert own data, never a prototype write
+  while (true) {
+    i = yamlSkipBlank(recs, i);
+    if (i >= recs.length) break;
+    const r = recs[i];
+    if (r.indent < ind) break;
+    if (r.indent === ind && r.kind === "seq") break; // a de-dented seq belongs to this key
+    if (r.indent > ind) throw yamlErr(r.line, "unexpected indent in map");
+    if (r.kind !== "map") throw yamlErr(r.line, "expected 'key: value'");
+    const { key, rest } = yamlSplitKeyValue(r.body, r.line);
+    i++;
+    if (rest === "") {
+      const [child, ni] = yamlParseChild(recs, i, ind);
+      obj[key] = child; i = ni;
+    } else if (/^[|>][-+]?$/.test(rest)) {
+      const [s, ni] = yamlConsumeBlock(recs, i, ind, rest); obj[key] = s; i = ni;
+    } else {
+      obj[key] = yamlScalarOrFlow(rest, r.line);
+    }
+  }
+  return [obj, i];
+}
+
+/* a map value with no inline scalar: a deeper map/seq, or a seq sitting at the
+ * key's own column (the idiomatic `key:\n- a`), or null. */
+function yamlParseChild(recs, i, parentInd) {
+  const j = yamlSkipBlank(recs, i);
+  if (j < recs.length && recs[j].indent === parentInd && recs[j].kind === "seq") {
+    return yamlParseSeq(recs, j, parentInd);
+  }
+  return yamlParseBlock(recs, i, parentInd);
+}
+
+function yamlParseSeq(recs, i, ind) {
+  const arr = [];
+  while (true) {
+    i = yamlSkipBlank(recs, i);
+    if (i >= recs.length) break;
+    const r = recs[i];
+    if (r.indent !== ind || r.kind !== "seq") break;
+    const after = r.body === "-" ? "" : r.body.slice(2);
+    const contentCol = r.indent + 2;
+    if (after === "") {
+      const [v, ni] = yamlParseBlock(recs, i + 1, r.indent); arr.push(v); i = ni;
+    } else if (after === "-" || after.startsWith("- ")) {
+      const [v, ni] = yamlParseInline(recs, i, contentCol, after, "seq"); arr.push(v); i = ni;
+    } else if (yamlFindSep(after) >= 0) {
+      const [m, ni] = yamlParseInline(recs, i, contentCol, after, "map"); arr.push(m); i = ni;
+    } else {
+      arr.push(yamlScalarOrFlow(after, r.line)); i++;
+    }
+  }
+  return [arr, i];
+}
+
+/* a seq item whose content starts inline on the dash line (`- key: v` or
+ * `- - x`): synthesize that content as a rec at contentCol and parse the
+ * map/seq there, then map the cursor back to the original rec list. */
+function yamlParseInline(recs, i, contentCol, after, kind) {
+  const synth = {
+    raw: " ".repeat(contentCol) + after,
+    indent: contentCol, body: after, kind: kind, blank: false, line: recs[i].line,
+  };
+  const view = [synth].concat(recs.slice(i + 1));
+  const [val, ni] = kind === "map"
+    ? yamlParseMap(view, 0, contentCol)
+    : yamlParseSeq(view, 0, contentCol);
+  return [val, i + ni];
+}
+
+function yamlScalarOrFlow(tok, line) {
+  tok = tok.trim();
+  if (tok[0] === "[" || tok[0] === "{") return yamlFlow(tok, line);
+  return yamlCoerceScalar(tok, line);
+}
+
+function yamlCoerceScalar(raw, line) {
+  if (raw[0] === '"' || raw[0] === "'") return yamlParseQuoted(raw, line).value;
+  if (/^[&*!]/.test(raw)) throw yamlErr(line, "anchors/aliases/tags are not supported");
+  raw = yamlStripInlineComment(raw).trim();
+  if (raw === "" || raw === "~" || /^null$/i.test(raw)) return null;
+  if (/^true$/i.test(raw)) return true;
+  if (/^false$/i.test(raw)) return false;
+  // numbers, but leading-zero tokens (007, 0755, 08) stay strings — preserve
+  // version / service-tag / octal-ish tokens; pure 0 and -0/+0 are still numeric.
+  if (!/^[-+]?0[0-9]/.test(raw)) {
+    if (/^[-+]?[0-9]+$/.test(raw)) return parseInt(raw, 10);
+    if (/^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$/.test(raw)) {
+      const n = Number(raw);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return raw;
+}
+
+function yamlStripInlineComment(raw) {
+  let i = 0, q = null;
+  while (i < raw.length) {
+    const c = raw[i];
+    if (q) { if (c === q) q = null; i++; continue; }
+    if (c === '"' || c === "'") { q = c; i++; continue; }
+    if (c === "#" && (i === 0 || raw[i - 1] === " " || raw[i - 1] === "\t")) return raw.slice(0, i);
+    i++;
+  }
+  return raw;
+}
+
+/* parse a quoted scalar at raw[0]; returns {value, end} (end = index after close) */
+function yamlParseQuoted(raw, line) {
+  const q = raw[0];
+  let i = 1, out = "";
+  if (q === '"') {
+    while (i < raw.length) {
+      const c = raw[i];
+      if (c === '"') return { value: out, end: i + 1 };
+      if (c === "\\") {
+        const n = raw[i + 1];
+        if (n === '"') out += '"';
+        else if (n === "\\") out += "\\";
+        else if (n === "n") out += "\n";
+        else if (n === "t") out += "\t";
+        else if (n === "r") out += "\r";
+        else if (n === "0") out += "\0";
+        else if (n === "/") out += "/";
+        else if (n === "u") {
+          const hex = raw.slice(i + 2, i + 6);
+          if (!/^[0-9a-fA-F]{4}$/.test(hex)) throw yamlErr(line, "bad \\u escape");
+          out += String.fromCharCode(parseInt(hex, 16)); i += 4;
+        } else throw yamlErr(line, "unknown escape \\" + n);
+        i += 2; continue;
+      }
+      out += c; i++;
+    }
+    throw yamlErr(line, "unterminated double-quote");
+  }
+  while (i < raw.length) {
+    const c = raw[i];
+    if (c === "'") {
+      if (raw[i + 1] === "'") { out += "'"; i += 2; continue; }
+      return { value: out, end: i + 1 };
+    }
+    out += c; i++;
+  }
+  throw yamlErr(line, "unterminated single-quote");
+}
+
+/* single-line flow collection: [..] or {..}, nested, quote-aware */
+function yamlFlow(str, line) {
+  let i = 0, depth = 0;
+  function ws() { while (i < str.length && (str[i] === " " || str[i] === "\t")) i++; }
+  function val() {
+    ws();
+    if (str[i] === "[" || str[i] === "{") {
+      if (++depth > 64) throw yamlErr(line, "flow nesting too deep"); // clean error, not a RangeError
+      const v = str[i] === "[" ? seq() : map();
+      depth--; return v;
+    }
+    return scalar(false);
+  }
+  function seq() {
+    i++; ws();
+    const arr = [];
+    if (str[i] === "]") { i++; return arr; }
+    while (true) {
+      arr.push(val()); ws();
+      if (str[i] === ",") { i++; ws(); if (str[i] === "]") { i++; break; } continue; } // tolerate a trailing comma
+      if (str[i] === "]") { i++; break; }
+      throw yamlErr(line, "bad flow sequence");
+    }
+    return arr;
+  }
+  function map() {
+    i++; ws();
+    const obj = Object.create(null); // flow map: same prototype-pollution defense as block maps
+    if (str[i] === "}") { i++; return obj; }
+    while (true) {
+      ws();
+      const k = scalar(true); ws();
+      if (str[i] !== ":") throw yamlErr(line, "flow map entry needs ':'");
+      i++;
+      obj[k] = val(); ws();
+      if (str[i] === ",") { i++; continue; }
+      if (str[i] === "}") { i++; break; }
+      throw yamlErr(line, "bad flow map");
+    }
+    return obj;
+  }
+  function scalar(isKey) {
+    ws();
+    if (str[i] === '"' || str[i] === "'") {
+      const parsed = yamlParseQuoted(str.slice(i), line);
+      i += parsed.end;
+      return parsed.value;
+    }
+    let s = "";
+    const stop = isKey ? ",]}:" : ",]}";
+    while (i < str.length && stop.indexOf(str[i]) < 0) { s += str[i]; i++; }
+    s = s.trim();
+    return isKey ? s : yamlCoerceScalar(s, line);
+  }
+  const result = val(); ws();
+  if (i < str.length) throw yamlErr(line, "trailing characters after flow collection");
+  return result;
+}
+
+function yamlConsumeBlock(recs, i, parentInd, indicator) {
+  const folded = indicator[0] === ">";
+  const chomp = indicator[1] || "clip"; // "-" strip, "+" keep, else clip
+  const lines = [];
+  let baseline = null;
+  while (i < recs.length) {
+    const r = recs[i];
+    if (r.raw.trim() === "") { lines.push(""); i++; continue; }
+    if (r.indent <= parentInd) break;
+    if (baseline === null) baseline = r.indent;
+    lines.push(r.raw.slice(baseline));
+    i++;
+  }
+  let trailing = 0;
+  while (lines.length && lines[lines.length - 1] === "") { lines.pop(); trailing++; }
+  let text;
+  if (folded) {
+    text = "";
+    for (let k = 0; k < lines.length; k++) {
+      if (lines[k] === "") text += "\n";
+      else { if (k > 0 && lines[k - 1] !== "" && text !== "") text += " "; text += lines[k]; }
+    }
+  } else {
+    text = lines.join("\n");
+  }
+  if (chomp === "-") { /* strip: no trailing newline */ }
+  else if (chomp === "+") text += "\n".repeat(trailing + 1);
+  else text += "\n"; // clip
+  return [text, i];
+}
+
+/* =====================================================================
+ * 2. SPEC ENVELOPE
+ * ===================================================================== */
+
+/* text -> { data, body, format } : JSON, markdown-with-frontmatter, or YAML */
+function parseSpecText(text) {
+  const t = String(text);
+  const head = yamlStripBom(t).replace(/\r\n?/g, "\n").trimStart();
+  if (head[0] === "{" || head[0] === "[") return { data: JSON.parse(t), body: "", format: "json" };
+  const fm = parseFrontmatter(t);
+  if (fm.hasFrontmatter) return { data: fm.data, body: fm.body, format: "markdown" };
+  return { data: parseYaml(t), body: "", format: "yaml" };
+}
+
+/* normalize a parsed spec object into { kind, meta, spec } */
+function parseEnvelope(input) {
+  const obj = typeof input === "string" ? parseSpecText(input).data : input;
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
+    throw new Error("spec must parse to a mapping/object");
+  }
+  let kind = obj.kind || obj["x-forge-kind"];
+  if (!kind) {
+    if (obj.type === "object" && obj.properties) kind = "form";
+    else if (obj.views || obj.widgets || obj.dataSource) kind = "view";
+  }
+  const meta = {
+    name: obj.name || obj["x-forge-name"] || null,
+    title: obj.title || obj.name || obj["x-forge-name"] || "",
+    version: obj.version || obj["x-forge-version"] || null,
+  };
+  return { kind: kind || null, meta, spec: obj };
+}
+
+function validateEnvelope(env) {
+  const errs = [];
+  if (!env || typeof env !== "object") return ["spec did not parse to an object"];
+  if (env.kind !== "form" && env.kind !== "view") {
+    errs.push("kind must be 'form' or 'view' (got " + JSON.stringify(env.kind) + ")");
+  }
+  if (!env.meta || !env.meta.name) errs.push("spec needs a name (name / x-forge-name)");
+  if (env.kind === "form") {
+    if (!env.spec.properties || typeof env.spec.properties !== "object") {
+      errs.push("form spec needs a 'properties' object");
+    }
+  } else if (env.kind === "view") {
+    if (!env.spec.views && !env.spec.widgets) errs.push("view spec needs 'views' or 'widgets'");
+  }
+  return errs;
+}
+
+/* =====================================================================
+ * 3. SHELL  (browser-only beyond this point; guarded by boot())
+ * ===================================================================== */
+
+const $ = (s) => document.querySelector(s);
+const el = (tag, cls, html) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html != null) e.innerHTML = html;
+  return e;
+};
+// escapes for BOTH text and double/single-quoted attribute contexts (untrusted
+// spec + data values are interpolated into innerHTML incl. attributes), so a
+// value can never break out of an attribute or inject markup.
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (n) => (Math.round(n * 100) / 100).toString();
+
+const THEME_KEY = "spec-renderer.theme.v1";
+
+function applyTheme(t) {
+  document.documentElement.dataset.cabin = t;
+  const b = $("#themeBtn");
+  if (b) b.textContent = t === "day" ? "night" : "day";
+}
+function toggleTheme() {
+  const t = document.documentElement.dataset.cabin === "day" ? "night" : "day";
+  applyTheme(t);
+  try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+}
+
+/* =====================================================================
+ * 4. FORM RENDERER  (Phase 1)
+ *    Walks a JSON-Schema-subset spec + extension keywords. Export bytes
+ *    (env / secrets / json) reproduce config-forge exactly: keys verbatim,
+ *    allFields order (group order then property order, scoped excluded),
+ *    envQuote on [\s#'"$]-or-empty, banners from x-forge-* extensions.
+ * ===================================================================== */
+
+const FORM_FORMAT_VALID = {
+  ipv4: [/^\d{1,3}(\.\d{1,3}){3}$/, "an IPv4 address (e.g. 192.0.2.1)"],
+  email: [/^[^@\s]+@[^@\s]+\.[^@\s]+$/, "an email address"],
+  uri: [/^https?:\/\/\S+$/, "a URL (http/https)"],
+};
+
+const FORM_STATUSES = ["known", "default", "fill", "scoped-out"];
+function formNormField(key, p, required) {
+  // whitelist status to the documented enum — an unknown value would otherwise
+  // flow verbatim into a `b-<status>` class name (and is meaningless anyway).
+  const status = FORM_STATUSES.indexOf(p.status) >= 0 ? p.status : (required.has(key) ? "fill" : "known");
+  return {
+    key,
+    jsType: p.type, format: p.format || null, enum: p.enum || null,
+    status,
+    scoped: status === "scoped-out",
+    secret: !!p.secret,
+    required: required.has(key),
+    def: "default" in p && p.default != null ? p.default : "", // match config-forge curVal (default ?? "")
+    title: p.title != null ? p.title : "",
+    desc: p.description != null ? p.description : "",
+  };
+}
+
+/* [{group, fields:[normField]}] in x-forge-groups order, properties in insertion order */
+function formGrouped(spec) {
+  const groups = spec["x-forge-groups"] || [{ id: null, title: spec.title || "" }];
+  const props = spec.properties || {};
+  const required = new Set(spec.required || []);
+  const keys = Object.keys(props);
+  const used = new Set();
+  const out = [];
+  for (const g of groups) {
+    const fields = [];
+    for (const key of keys) {
+      if (used.has(key)) continue; // a property belongs to one group (first wins) — no double-emit on duplicate ids
+      if ((props[key].group || null) !== (g.id || null)) continue;
+      fields.push(formNormField(key, props[key], required));
+      used.add(key);
+    }
+    if (fields.length) out.push({ group: g, fields });
+  }
+  const rest = keys.filter((k) => !used.has(k));
+  if (rest.length) out.push({ group: { id: null, title: "" }, fields: rest.map((k) => formNormField(k, props[k], required)) });
+  return out;
+}
+function formFields(spec) { return formGrouped(spec).reduce((a, g) => a.concat(g.fields), []); }
+function formCurVal(field, answers) { return field.key in answers ? answers[field.key] : field.def; }
+
+function formFieldError(field, v) {
+  if (v === "" || v == null) return field.required ? "required" : null;
+  if (field.enum) { if (!field.enum.includes(v)) return "must be one of: " + field.enum.join(", "); return null; }
+  if (field.jsType === "boolean") { if (!["true", "false"].includes(String(v))) return "yes/no"; return null; }
+  if (field.jsType === "integer") { if (!/^-?\d+$/.test(v)) return "must be an integer"; return null; }
+  if (field.format && FORM_FORMAT_VALID[field.format]) {
+    const [rx, desc] = FORM_FORMAT_VALID[field.format];
+    if (!rx.test(v)) return "must be " + desc;
+    if (field.format === "ipv4" && v.split(".").some((o) => +o > 255)) return "octets must be 0-255";
+  }
+  return null;
+}
+
+function formBuckets(spec, answers) {
+  const pub = [], sec = [];
+  for (const f of formFields(spec)) {
+    if (f.scoped) continue; // allFields excludes scoped-out
+    const v = formCurVal(f, answers);
+    (f.secret ? sec : pub).push([f.key, v]);
+  }
+  return { pub, sec };
+}
+function formEnvQuote(v) {
+  if (v === "" || /[\s#'"$]/.test(v)) return '"' + String(v).replace(/"/g, '\\"') + '"';
+  return v;
+}
+function formEnvText(items, banner) {
+  return banner + items.map(([k, v]) => k + "=" + formEnvQuote(v)).join("\n") + "\n";
+}
+function formBanner(spec, which) {
+  if (which === "secret") return spec["x-forge-secret-banner"] != null ? spec["x-forge-secret-banner"] : "# secrets — gitignore this file.\n\n";
+  if (which === "secretAll") return spec["x-forge-secret-banner-all"] != null ? spec["x-forge-secret-banner-all"] : formBanner(spec, "secret");
+  return spec["x-forge-env-banner"] != null ? spec["x-forge-env-banner"]
+    : "# generated by spec-renderer from spec '" + (spec["x-forge-name"] || spec.name || "spec") + "'\n\n";
+}
+function formExportEnv(spec, answers) { return formEnvText(formBuckets(spec, answers).pub, formBanner(spec, "env")); }
+function formExportSecrets(spec, answers, variant) { return formEnvText(formBuckets(spec, answers).sec, formBanner(spec, variant === "all" ? "secretAll" : "secret")); }
+function formExportJson(spec, answers) {
+  // Object.fromEntries — matches config-forge exactly (incl. for prototype-named keys)
+  return JSON.stringify(Object.fromEntries(formBuckets(spec, answers).pub), null, 2) + "\n";
+}
+function formInvalidCount(spec, answers) {
+  return formFields(spec).filter((f) => !f.scoped && formFieldError(f, formCurVal(f, answers))).length;
+}
+function formHasSecrets(spec) { return formFields(spec).some((f) => !f.scoped && f.secret); }
+
+/* ---- browser DOM (renderer + export buttons) ---- */
+function formStateKey(spec) { return "sr.form." + (spec["x-forge-name"] || spec.name || "x") + ".v1"; }
+function formPersist(spec, answers) { try { localStorage.setItem(formStateKey(spec), JSON.stringify(answers)); } catch (e) {} }
+function formRestore(spec) { try { const r = localStorage.getItem(formStateKey(spec)); return r ? JSON.parse(r) : {}; } catch (e) { return {}; } }
+function download(name, text) {
+  const b = new Blob([text], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b); a.download = name; a.className = "dl";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function mountForm(env) {
+  const spec = env.spec;
+  const answers = formRestore(spec);
+  const sub = $("#subtitle");
+  if (sub) sub.textContent = (env.meta.title || env.meta.name || "") + (env.meta.version ? " · v" + env.meta.version : "");
+  const tabs = $("#tabs"); if (tabs) tabs.innerHTML = "";
+  const pickers = $("#pickers"); if (pickers) pickers.innerHTML = "";
+  const loader = $("#loader"); if (loader) loader.style.display = "none";
+  const view = $("#view"); view.innerHTML = "";
+
+  for (const { group, fields } of formGrouped(spec)) {
+    const card = el("div", "card");
+    const scopedN = fields.filter((f) => f.scoped).length;
+    card.appendChild(el("div", "group-title", esc(group.title) + (scopedN ? "  (" + scopedN + " scoped-out)" : "")));
+    if (group.note) card.appendChild(el("p", "note", esc(group.note)));
+    for (const f of fields) card.appendChild(formRow(spec, f, answers));
+    view.appendChild(card);
+  }
+  formMountBar(spec, answers);
+  formUpdateBar(spec, answers);
+}
+
+function formRow(spec, field, answers) {
+  const row = el("div", "field" + (field.scoped ? " scoped" : "") + (field.required ? " req" : ""));
+  row.dataset.key = field.key;
+  const badge = field.scoped ? "" : '<span class="badge b-' + esc(field.status) + '">' + esc(field.status) + "</span>";
+  const meta = el("div", "meta",
+    '<span class="key">' + esc(field.key) + "</span>" + badge +
+    (field.title ? '<div class="label">' + esc(field.title) + "</div>" : "") +
+    (field.desc ? '<div class="help">' + esc(field.desc) + "</div>" : ""));
+  row.appendChild(meta);
+
+  const wrap = el("div");
+  if (!field.scoped) {
+    let input;
+    if (field.enum) {
+      input = el("select");
+      field.enum.forEach((o) => { const op = el("option"); op.value = o; op.textContent = o; input.appendChild(op); });
+    } else if (field.jsType === "boolean") {
+      input = el("select");
+      ["true", "false"].forEach((o) => { const op = el("option"); op.value = o; op.textContent = o; input.appendChild(op); });
+    } else {
+      input = el("input");
+      input.type = field.secret ? "password" : "text";
+    }
+    input.value = formCurVal(field, answers);
+    input.addEventListener("input", () => { answers[field.key] = input.value; formPersist(spec, answers); formCheck(row, field, input); formUpdateBar(spec, answers); });
+    wrap.appendChild(input);
+    const err = el("div", "err"); err.style.display = "none"; wrap.appendChild(err);
+    formCheck(row, field, input);
+  } else {
+    wrap.innerHTML = '<div class="label">excluded — scoped out</div>';
+  }
+  row.appendChild(wrap);
+  return row;
+}
+
+function formCheck(row, field, input) {
+  const e = formFieldError(field, input.value);
+  const errEl = row.querySelector(".err");
+  if (e) { row.classList.add("invalid"); if (errEl) { errEl.textContent = "✗ " + e; errEl.style.display = "block"; } }
+  else { row.classList.remove("invalid"); if (errEl) errEl.style.display = "none"; }
+  return !e;
+}
+
+function formMountBar(spec, answers) {
+  const bar = $("#bar");
+  if (!bar) return;
+  bar.style.display = "flex";
+  bar.innerHTML = '<span class="count" id="count"></span>'
+    + '<button id="dlEnv">variables.env</button>'
+    + '<button id="dlSecret">variables-secrets.env</button>'
+    + '<button class="ghost" id="dlJson">variables.json</button>'
+    + '<button id="dlAll">Download all</button>';
+  $("#dlEnv").onclick = () => { const t = formExportEnv(spec, answers); download("variables.env", t); mcpEmitResult(t); };
+  $("#dlSecret").onclick = () => download("variables-secrets.env", formExportSecrets(spec, answers, "secret"));
+  $("#dlJson").onclick = () => { const t = formExportJson(spec, answers); download("variables.json", t); mcpEmitResult(t); };
+  $("#dlAll").onclick = () => {
+    const env = formExportEnv(spec, answers);
+    download("variables.env", env);
+    if (formBuckets(spec, answers).sec.length) download("variables-secrets.env", formExportSecrets(spec, answers, "all"));
+    download("variables.json", formExportJson(spec, answers));
+    mcpEmitResult(env);
+  };
+}
+
+function formUpdateBar(spec, answers) {
+  const count = $("#count");
+  const fields = formFields(spec).filter((f) => !f.scoped);
+  const bad = formInvalidCount(spec, answers);
+  if (count) count.textContent = fields.length + " fields · " + bad + " invalid" + (bad ? "" : "  ✓ ready");
+  ["#dlEnv", "#dlJson", "#dlAll"].forEach((s) => { const b = $(s); if (b) b.disabled = bad > 0; });
+  const ds = $("#dlSecret");
+  if (ds) { ds.style.display = formHasSecrets(spec) ? "" : "none"; ds.disabled = bad > 0; }
+}
+
+/* =====================================================================
+ * 5. VIEW RENDERER  (Phase 2)
+ *    5a. dataset model + accessors (grouped: domains -> runs / transcripts)
+ *    5b. binding resolver — {path} lookups, $selector, adapter.fn(args) ONLY.
+ *        No arithmetic / conditionals / loops: a request for a new resolver
+ *        form is the abstraction leaking — write an adapter instead.
+ *    5c. widgets + selectors + mountView  (built on later ticks)
+ * ===================================================================== */
+
+/* ---- 5a. dataset normalization + accessors ---- */
+function emptyDataset() { return { domains: {}, generated: null, harness_commit: null }; }
+function isBundle(o) { return !!o && typeof o.domains === "object" && o.domains !== null; }
+function isScorecard(o) { return !!o && Array.isArray(o.cases) && typeof o.run_id === "string"; }
+function ensureDomain(ds, name) { if (!ds.domains[name]) ds.domains[name] = { runs: {}, transcripts: {} }; return ds.domains[name]; }
+function mergeBundle(ds, b) {
+  for (const d in b.domains) {
+    const src = b.domains[d], dom = ensureDomain(ds, d);
+    Object.assign(dom.runs, src.runs || {});
+    Object.assign(dom.transcripts, src.transcripts || {});
+  }
+  if (b.generated) ds.generated = b.generated;
+  if (b.harness_commit) ds.harness_commit = b.harness_commit;
+  return ds;
+}
+function domainFromRunId(runId) { const p = String(runId).split("-"); return p.length >= 4 ? p.slice(2, -1).join("-") : "(dropped)"; }
+function viewDomains(ds) { return Object.keys(ds.domains); }
+function viewRunsFor(ds, d) { const dom = ds.domains[d]; return dom ? Object.keys(dom.runs).sort().reverse() : []; }
+function viewCardOf(ds, d, run) { return ds.domains[d] && ds.domains[d].runs[run]; }
+function viewTranscriptOf(ds, d, c) { const dom = ds.domains[d]; return dom && dom.transcripts ? dom.transcripts[c] : null; }
+
+/* ---- 5b. binding resolver ----
+ * Untrusted specs author these bindings, so every accessor is constrained to
+ * own, non-prototype keys: a binding can never walk to __proto__ / constructor
+ * / prototype and reach Object/Function statics. */
+const hasOwn = (o, k) => o != null && Object.prototype.hasOwnProperty.call(o, k);
+function isDangerousKey(k) { return k === "__proto__" || k === "prototype" || k === "constructor"; }
+function lookup(obj, path) {
+  let cur = obj;
+  for (const part of String(path).split(".")) {
+    if (cur == null || typeof cur !== "object" || isDangerousKey(part) || !hasOwn(cur, part)) return undefined;
+    cur = cur[part];
+  }
+  return cur;
+}
+function resolveBinding(b, ctx, adapters) {
+  if (typeof b !== "string") return b;
+  const call = /^([a-z0-9-]+)\.([a-zA-Z_$][\w$]*)\((.*)\)$/.exec(b);
+  if (call) {
+    const [, adp, fn, argstr] = call;
+    const reg = adapters || ADAPTERS;
+    const adapter = hasOwn(reg, adp) ? reg[adp] : null;
+    if (!adapter || isDangerousKey(fn) || !hasOwn(adapter, fn) || typeof adapter[fn] !== "function") throw new Error("unknown adapter call: " + b);
+    const args = argstr.trim() ? argstr.split(",").map((a) => resolveBinding(a.trim(), ctx, adapters)) : [];
+    return adapter[fn].apply(null, args);
+  }
+  if (b[0] === "$") { const k = b.slice(1); return hasOwn(ctx, k) && !isDangerousKey(k) ? ctx[k] : undefined; }
+  const lk = /^\{(.+)\}$/.exec(b);
+  if (lk) return lookup(ctx, lk[1]);
+  const head = b.split(".")[0];
+  if (/^[a-zA-Z_$][\w$.]*$/.test(b) && hasOwn(ctx, head)) return lookup(ctx, b);
+  return b; // literal
+}
+
+/* ---- 5c. widget helpers (lifted verbatim from eval-dashboard) ---- */
+function svgMetricBars(rollups) {
+  const W = 520, rowH = 26, pad = 2;
+  const h = rollups.length * rowH;
+  const bars = rollups.map((r, i) => {
+    const y = i * rowH + pad;
+    const w = Math.round(r.mean_score * W);
+    return '<rect x="0" y="' + y + '" width="' + W + '" height="' + (rowH - 6) + '" rx="3" fill="var(--cabin-rule)"/>'
+      + '<rect x="0" y="' + y + '" width="' + w + '" height="' + (rowH - 6) + '" rx="3" fill="var(--cabin-accent)"/>'
+      + '<text x="8" y="' + (y + rowH / 2) + '" dominant-baseline="middle" font-size="11" font-family="var(--font-mono)" fill="var(--cabin-ink)">' + fmt(r.mean_score) + "</text>";
+  }).join("");
+  return '<svg viewBox="0 0 ' + W + " " + h + '" width="100%" height="' + h + '" role="img" aria-label="per-metric mean score">' + bars + "</svg>";
+}
+function passDot(passed) { return '<span class="dot ' + (passed ? "bg-ok" : "bg-bad") + '"></span>'; }
+function renderBlock(block) {
+  if (block.type === "text") return el("div", "blk text", esc(block.text));
+  if (block.type === "tool_use") {
+    const submit = block.name === "submit_answer";
+    const d = el("div", "blk toolcall" + (submit ? " submit" : ""));
+    d.innerHTML = '<div><span class="arrow">' + (submit ? "final answer" : "calls") + '</span> <span class="name">' + esc(block.name) + "</span></div>"
+      + "<pre>" + esc(JSON.stringify(block.input, null, 2)) + "</pre>";
+    return d;
+  }
+  if (block.type === "tool_result") {
+    const d = el("div", "blk toolresult" + (block.is_error ? " err" : ""));
+    const body = typeof block.content === "string" ? block.content : JSON.stringify(block.content, null, 2);
+    d.innerHTML = '<div class="tag">observed' + (block.is_error ? " · error" : "") + "</div><pre>" + esc(body) + "</pre>";
+    return d;
+  }
+  const d = el("details", "blk");
+  d.innerHTML = "<summary>" + esc(block.type || "block") + "</summary><pre>" + esc(JSON.stringify(block, null, 2)) + "</pre>";
+  return d;
+}
+function renderTurn(message) {
+  const role = message.role || "assistant";
+  const t = el("div", "turn " + role);
+  t.appendChild(el("div", "who", role === "user" ? "input / observation" : "assistant"));
+  if (typeof message.content === "string") t.appendChild(el("div", "blk text", esc(message.content)));
+  else (message.content || []).forEach((b) => t.appendChild(renderBlock(b)));
+  return t;
+}
+
+/* ---- 5c. widget registry: each renders into `host` from (spec, ctx) ---- */
+const WIDGETS = {
+  heading(w, ctx, host) { host.appendChild(el("h2", "view-h", esc(rb(w.value, ctx)))); },
+  caption(w, ctx, host) { host.appendChild(el("p", "micro", esc(rb(w.text, ctx)))); },
+  chips(w, ctx, host) {
+    const src = rb(w.source, ctx) || {};
+    const html = (w.fields || []).map((f) => '<span class="chip">' + esc(src[f] == null ? "" : src[f]) + "</span>").join("");
+    host.appendChild(el("div", "row", html));
+  },
+  "stat-cards"(w, ctx, host) {
+    const html = (w.cards || []).map((c) => {
+      const val = rb(c.value, ctx);
+      const valTxt = typeof val === "number" ? fmt(val) : esc(val);
+      const denom = c.denom != null ? '<span class="muted" style="font-size:16px">/' + esc(rb(c.denom, ctx)) + "</span>" : "";
+      return "<div><div class=\"big\">" + valTxt + denom + '</div><div class="micro">' + esc(c.label) + "</div></div>";
+    }).join("");
+    host.appendChild(el("div", "row", html));
+  },
+  "hard-gate-banner"(w, ctx, host) {
+    const fails = rb(w.source, ctx) || [];
+    host.appendChild(fails.length
+      ? el("div", "banner fail", "<strong>HARD-GATE FAIL</strong> — " + fails.map(esc).join(", "))
+      : el("div", "banner pass", "all hard gates passed"));
+  },
+  "metric-rollup"(w, ctx, host) {
+    const rollups = rb(w.source, ctx) || [];
+    if (rollups.length === 1 && rollups[0].metric === "(untagged)") return;
+    const mc = el("div", "card");
+    mc.appendChild(el("div", "micro", esc(w.caption || "per-metric rollup — mean score (bar) and pass rate")));
+    rollups.forEach((r) => {
+      const row = el("div", "metric-row");
+      row.appendChild(el("div", "name", esc(r.metric)));
+      row.appendChild(el("div", "micro", r.passed + "/" + r.n + " pass"));
+      row.appendChild(el("div", null, svgMetricBars([r])));
+      mc.appendChild(row);
+    });
+    host.appendChild(mc);
+  },
+  "case-table"(w, ctx, host) {
+    const card = rb(w.source, ctx);
+    if (!card) { host.appendChild(el("p", "muted", "No run selected.")); return; }
+    const tc = el("div", "card");
+    const tbl = el("table");
+    tbl.innerHTML = "<thead><tr><th>case</th><th>score</th><th>stop</th><th class='num'>turns</th><th>tools</th><th></th></tr></thead>";
+    const tb = el("tbody");
+    card.cases.forEach((c) => {
+      const tr = el("tr");
+      tr.innerHTML = "<td>" + passDot(c.passed) + esc(c.case_id) + (c.hard_gate ? ' <span class="chip">gate</span>' : "") + "</td>"
+        + '<td class="num">' + fmt(c.score) + '</td><td class="micro">' + esc(c.stop_reason) + "</td>"
+        + '<td class="num">' + esc(c.turns) + '</td><td class="micro">' + (c.tools_called ? c.tools_called.length : 0) + "</td>"
+        + '<td><span class="link" data-case="' + esc(c.case_id) + '">transcript →</span></td>';
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb); tc.appendChild(tbl); host.appendChild(tc);
+    tc.querySelectorAll(".link[data-case]").forEach((a) => { a.onclick = () => { VIEW.caseId = a.dataset.case; VIEW.view = "transcript"; viewMount(); }; });
+  },
+  "regression-diff"(w, ctx, host) {
+    const before = rb(w.before, ctx), after = rb(w.after, ctx);
+    if (!before || !after) { host.appendChild(el("p", "muted", "Pick two runs (before / after) in this domain.")); return; }
+    if (VIEW.runBefore === VIEW.runAfter) { host.appendChild(el("p", "muted", "Before and after are the same run — pick two different runs.")); return; }
+    const { rows, regressions, improvements } = ADAPTERS["eval-scoring"].diffRows(before, after);
+    const c = el("div", "card");
+    c.appendChild(el("div", "row", '<span class="chip">before · ' + esc(before.run_id) + '</span><span class="chip">after · ' + esc(after.run_id) + "</span>"));
+    c.appendChild(el("div", "row", '<span class="bad">' + regressions + ' regressions</span><span class="ok">' + improvements + " improvements</span>"));
+    const tbl = el("table");
+    tbl.innerHTML = "<thead><tr><th>case</th><th class='num'>before</th><th class='num'>after</th><th>change</th></tr></thead>";
+    const tb = el("tbody");
+    rows.forEach((r) => {
+      const tr = el("tr", r.marker === "REGRESSED" ? "regressed" : "");
+      const cls = r.marker === "REGRESSED" ? "bad" : r.marker === "improved" ? "ok" : r.marker === "new" ? "info" : "muted";
+      tr.innerHTML = "<td>" + esc(r.case_id) + '</td><td class="num">' + (r.before === null ? "–" : fmt(r.before)) + "</td>"
+        + '<td class="num">' + fmt(r.after) + '</td><td class="' + cls + '">' + (r.marker || "—") + "</td>";
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb); c.appendChild(tbl); host.appendChild(c);
+  },
+  transcript(w, ctx, host) {
+    const turns = rb(w.source, ctx);
+    if (!turns) { host.appendChild(el("p", "muted", "Pick a case to step through its plan-act-observe loop.")); return; }
+    const card = ctx.card, cs = card && card.cases.find((c) => c.case_id === ctx.caseId);
+    const head = el("div", "card");
+    head.appendChild(el("div", "row", '<span class="chip">' + esc(ctx.caseId) + "</span>"
+      + (cs ? passDot(cs.passed) + '<span class="chip">score ' + fmt(cs.score) + '</span><span class="chip">' + esc(cs.stop_reason) + "</span>"
+        + (cs.metric ? '<span class="chip">' + esc(cs.metric) + "</span>" : "") + (cs.hard_gate ? '<span class="chip bad">hard gate</span>' : "") : "")));
+    host.appendChild(head);
+    const c = el("div", "card");
+    turns.forEach((m) => c.appendChild(renderTurn(m)));
+    host.appendChild(c);
+  },
+  "cross-grid"(w, ctx, host) {
+    const grid = el("div", "cols");
+    viewDomains(VIEW.dataset).forEach((d) => {
+      const runId = viewRunsFor(VIEW.dataset, d)[0], card = viewCardOf(VIEW.dataset, d, runId);
+      const c = el("div", "card");
+      if (!card) { c.innerHTML = "<h3>" + esc(d) + '</h3><p class="muted">no run</p>'; grid.appendChild(c); return; }
+      const A = ADAPTERS["eval-scoring"], gate = A.hardGateFailures(card);
+      c.appendChild(el("div", "row", "<strong>" + esc(d) + "</strong>" + '<span class="dot ' + (gate.length ? "bg-bad" : "bg-ok") + '"></span>'));
+      c.appendChild(el("div", "row", '<div class="big" style="font-size:26px">' + A.passedCount(card) + "/" + card.cases.length + '</div><span class="micro">passed · score ' + fmt(A.totalScore(card)) + "</span>"));
+      const rollups = A.byMetric(card).filter((r) => r.metric !== "(untagged)");
+      if (rollups.length) c.appendChild(el("div", null, svgMetricBars(rollups)));
+      c.appendChild(el("div", "micro", esc(runId)));
+      grid.appendChild(c);
+    });
+    host.appendChild(grid);
+  },
+};
+
+/* ---- 5c. view state + mount ---- */
+const VIEW = { spec: null, dataset: null, view: null, domain: null, runAfter: null, runBefore: null, caseId: null };
+const VIEW_STATE_KEY = () => "sr.view." + ((VIEW.spec && (VIEW.spec["x-forge-name"] || VIEW.spec.name)) || "x") + ".v1";
+
+function rb(binding, ctx) { return resolveBinding(binding, ctx, ADAPTERS); }
+function viewCurView() { return (VIEW.spec.views || []).find((v) => v.key === VIEW.view) || (VIEW.spec.views || [])[0]; }
+function viewSelect(v) { return (v && v.select) || {}; }
+
+function viewResetRuns() {
+  const runs = viewRunsFor(VIEW.dataset, VIEW.domain);
+  VIEW.runAfter = runs[0] || null;
+  VIEW.runBefore = runs[1] || runs[0] || null;
+  viewResetCase();
+}
+function viewResetCase() {
+  const card = viewCardOf(VIEW.dataset, VIEW.domain, VIEW.runAfter);
+  VIEW.caseId = card && card.cases.length ? card.cases[0].case_id : null;
+}
+
+function viewContext() {
+  return {
+    dataset: VIEW.dataset, domain: VIEW.domain, caseId: VIEW.caseId,
+    card: viewCardOf(VIEW.dataset, VIEW.domain, VIEW.runAfter),
+    after: viewCardOf(VIEW.dataset, VIEW.domain, VIEW.runAfter),
+    before: viewCardOf(VIEW.dataset, VIEW.domain, VIEW.runBefore),
+    transcript: viewTranscriptOf(VIEW.dataset, VIEW.domain, VIEW.caseId),
+  };
+}
+
+function viewRenderTabs() {
+  const nav = $("#tabs"); if (!nav) return; nav.innerHTML = "";
+  (VIEW.spec.views || []).forEach((v) => {
+    const b = el("div", "tab" + (VIEW.view === v.key ? " on" : ""), esc(v.label || v.key));
+    b.onclick = () => { VIEW.view = v.key; viewMount(); };
+    nav.appendChild(b);
+  });
+}
+function viewPicker(label, opts, value) {
+  const wrap = el("label", null, esc(label));
+  const sel = el("select");
+  opts.forEach((o) => { const op = el("option"); op.value = o; op.textContent = o; if (o === value) op.selected = true; sel.appendChild(op); });
+  wrap.appendChild(sel);
+  return { wrap, sel };
+}
+function viewRenderPickers(cur) {
+  const p = $("#pickers"); if (!p) return; p.innerHTML = "";
+  if (!viewDomains(VIEW.dataset).length) return;
+  const sel = viewSelect(cur);
+  if (sel.domain) {
+    const dom = viewPicker("domain", viewDomains(VIEW.dataset), VIEW.domain);
+    dom.sel.onchange = () => { VIEW.domain = dom.sel.value; viewResetRuns(); viewMount(); };
+    p.appendChild(dom.wrap);
+  }
+  const runs = viewRunsFor(VIEW.dataset, VIEW.domain);
+  if (sel.run === "both") {
+    const a = viewPicker("after", runs, VIEW.runAfter); a.sel.onchange = () => { VIEW.runAfter = a.sel.value; viewRenderActive(); viewPersist(); };
+    const b = viewPicker("before", runs, VIEW.runBefore); b.sel.onchange = () => { VIEW.runBefore = b.sel.value; viewRenderActive(); viewPersist(); };
+    p.appendChild(a.wrap); p.appendChild(b.wrap);
+  } else if (sel.run === "after") {
+    const r = viewPicker("run", runs, VIEW.runAfter);
+    // when a run change resets the case set, re-mount so the case picker rebuilds (and persist)
+    r.sel.onchange = () => { VIEW.runAfter = r.sel.value; if (sel.case) { viewResetCase(); viewMount(); } else { viewRenderActive(); viewPersist(); } };
+    p.appendChild(r.wrap);
+  }
+  if (sel.case) {
+    const card = viewCardOf(VIEW.dataset, VIEW.domain, VIEW.runAfter);
+    const cOpts = card ? card.cases.map((c) => c.case_id) : [];
+    const c = viewPicker("case", cOpts, VIEW.caseId);
+    c.sel.onchange = () => { VIEW.caseId = c.sel.value; viewRenderActive(); viewPersist(); };
+    p.appendChild(c.wrap);
+  }
+}
+function viewRenderActive() {
+  const cur = viewCurView();
+  const host = $("#view"); host.innerHTML = "";
+  const ctx = viewContext();
+  for (const w of cur.widgets || []) { const fn = WIDGETS[w.widget]; if (fn) fn(w, ctx, host); }
+}
+function viewRenderFooter() {
+  const f = $("#foot"); if (!f) return;
+  const ds = VIEW.dataset;
+  const meta = ds.generated ? " · data " + esc(ds.generated) : "";
+  const commit = ds.harness_commit ? " · harness " + esc(ds.harness_commit).slice(0, 10) : "";
+  f.innerHTML = (VIEW.spec.footer || "") + meta + commit;
+}
+function viewPersist() { try { localStorage.setItem(VIEW_STATE_KEY(), JSON.stringify({ view: VIEW.view, domain: VIEW.domain, runAfter: VIEW.runAfter, runBefore: VIEW.runBefore, caseId: VIEW.caseId })); } catch (e) {} }
+function viewRestore() { try { const r = JSON.parse(localStorage.getItem(VIEW_STATE_KEY()) || "null"); if (r) Object.assign(VIEW, r); } catch (e) {} }
+
+function viewMount() {
+  const views = VIEW.spec.views || [];
+  if (!viewDomains(VIEW.dataset).length) {
+    const loader = $("#loader"); if (loader) loader.style.display = "";
+    const v = $("#view"); if (v) v.innerHTML = ""; const p = $("#pickers"); if (p) p.innerHTML = "";
+    viewRenderTabs(); viewRenderFooter(); return;
+  }
+  const loader = $("#loader"); if (loader) loader.style.display = "none";
+  if (!VIEW.view || !views.find((v) => v.key === VIEW.view)) VIEW.view = views[0] && views[0].key;
+  if (!VIEW.domain || !viewDomains(VIEW.dataset).includes(VIEW.domain)) { VIEW.domain = viewDomains(VIEW.dataset)[0]; viewResetRuns(); }
+  // a restored/stale run id that isn't in the current domain must be healed, or
+  // every widget reading the (missing) card would crash.
+  const runs = viewRunsFor(VIEW.dataset, VIEW.domain);
+  if (!VIEW.runAfter || runs.indexOf(VIEW.runAfter) < 0) viewResetRuns();
+  if (!VIEW.runBefore || runs.indexOf(VIEW.runBefore) < 0) VIEW.runBefore = runs[1] || runs[0] || null;
+  const cur = viewCurView();
+  if (viewSelect(cur).case) { // heal caseId against the run's CASES (not transcript presence)
+    const card = viewCardOf(VIEW.dataset, VIEW.domain, VIEW.runAfter);
+    const ids = card ? card.cases.map((c) => c.case_id) : [];
+    if (!VIEW.caseId || ids.indexOf(VIEW.caseId) < 0) viewResetCase();
+  }
+  viewRenderTabs(); viewRenderPickers(cur); viewRenderActive(); viewRenderFooter(); viewPersist();
+}
+
+function loadViewData() {
+  const ds = emptyDataset();
+  try {
+    const tag = $("#embedded-data");
+    const raw = tag ? tag.textContent.trim() : "";
+    if (raw) { const obj = JSON.parse(raw); if (isBundle(obj)) mergeBundle(ds, obj); }
+  } catch (e) {}
+  return ds;
+}
+
+function mountView(env) {
+  VIEW.spec = env.spec;
+  VIEW.dataset = loadViewData();
+  const sub = $("#subtitle"); if (sub) sub.textContent = env.meta.title || env.meta.name || "";
+  const bar = $("#bar"); if (bar) bar.style.display = "none";
+  viewRestore();
+  viewMount();
+}
+
+/* =====================================================================
+ * 6. ADAPTER REGISTRY  (named, NOT auto-discovered — a security boundary
+ *    for dropped specs). View bindings may call adapter.fn(...) only.
+ *
+ *    eval-scoring: the six recompute fns, lifted verbatim from eval-dashboard;
+ *    they mirror agentic-eval-harness scoring.py and MUST stay in lockstep
+ *    (pinned by tests/eval-scoring.test.mjs).
+ * ===================================================================== */
+function metricKey(c) { return c.metric || "(untagged)"; }
+function byMetric(card) {            // -> [{metric, n, passed, mean_score}]
+  const order = [];
+  for (const c of card.cases) { const k = metricKey(c); if (!order.includes(k)) order.push(k); }
+  return order.map((k) => {
+    const members = card.cases.filter((c) => metricKey(c) === k);
+    return {
+      metric: k,
+      n: members.length,
+      passed: members.filter((c) => c.passed).length,
+      mean_score: members.reduce((s, c) => s + c.score, 0) / members.length,
+    };
+  });
+}
+function totalScore(card) { return card.cases.reduce((s, c) => s + c.score, 0); }
+function passedCount(card) { return card.cases.filter((c) => c.passed).length; }
+function hardGateFailures(card) {
+  return card.cases.filter((c) => c.hard_gate && !c.passed).map((c) => c.case_id);
+}
+function diffRows(before, after) {   // mirrors scoring.diff_report deltas
+  const prior = new Map(before.cases.map((c) => [c.case_id, c]));
+  let regressions = 0, improvements = 0;
+  const rows = after.cases.map((c) => {
+    const old = prior.get(c.case_id);
+    const oldScore = old ? old.score : null;
+    let marker = "";
+    if (oldScore === null) marker = "new";
+    else if (c.score < oldScore) { marker = "REGRESSED"; regressions++; }
+    else if (c.score > oldScore) { marker = "improved"; improvements++; }
+    return { case_id: c.case_id, before: oldScore, after: c.score, marker };
+  });
+  return { rows, regressions, improvements };
+}
+
+const ADAPTERS = {
+  "eval-scoring": { metricKey, byMetric, totalScore, passedCount, hardGateFailures, diffRows },
+};
+
+/* =====================================================================
+ * 6b. MCP APPS BRIDGE (SEP-1865) — progressive enhancement.
+ *     When the renderer runs inside an MCP host iframe (window.parent is a
+ *     different window), it does the ui/initialize handshake, applies the
+ *     host theme, accepts host-pushed data via ui/notifications/tool-result,
+ *     and (for forms) emits the assembled result via ui/message. When there
+ *     is no host (file:// / top-level), every call is a silent no-op, so the
+ *     standalone artifact is unaffected.
+ * ===================================================================== */
+const MCP = { bridge: null, env: null };
+
+function mcpConnect(env) {
+  MCP.env = env;
+  const w = typeof window !== "undefined" ? window : null;
+  if (!w || !w.parent || w.parent === w || typeof w.addEventListener !== "function") return null;
+  const pending = {};
+  let rpcId = 0;
+  const send = (m) => w.parent.postMessage(m, "*");
+  const bridge = {
+    request(method, params) { const id = "ui-" + (++rpcId); send({ jsonrpc: "2.0", id, method, params }); return new Promise((r) => { pending[id] = r; }); },
+    notify(method, params) { send({ jsonrpc: "2.0", method, params }); },
+  };
+  MCP.bridge = bridge;
+  w.addEventListener("message", (ev) => mcpOnMessage(ev && ev.data, pending));
+  bridge.request("ui/initialize", { protocolVersion: "2026-01-26", capabilities: {} }).then((res) => {
+    bridge.notify("ui/notifications/initialized", {});
+    const theme = res && res.hostContext && res.hostContext.theme;
+    if (theme) applyTheme(theme);
+  });
+  return bridge;
+}
+
+function mcpOnMessage(m, pending) {
+  if (!m || typeof m !== "object") return;
+  if (m.id != null && pending && pending[m.id]) { const cb = pending[m.id]; delete pending[m.id]; cb(m.result); return; }
+  if (m.method === "ui/notifications/tool-result") mcpOnToolResult(m.params);
+  else if (m.method === "ui/notifications/host-context-changed" && m.params && m.params.theme) applyTheme(m.params.theme);
+}
+
+function mcpOnToolResult(params) {
+  const data = params && (params.structuredContent || params.data || params.result);
+  if (data && isBundle(data) && MCP.env && MCP.env.kind === "view") { mergeBundle(VIEW.dataset, data); viewMount(); }
+}
+
+/* emit a form's assembled output to the host (no-op outside a host) */
+function mcpEmitResult(text) { if (MCP.bridge) MCP.bridge.notify("ui/message", { content: [{ type: "text", text: text }] }); }
+
+/* =====================================================================
+ * 7. BOOT + EXPORTS
+ * ===================================================================== */
+function mount(env) {
+  if (env.kind === "form") mountForm(env);
+  else if (env.kind === "view") mountView(env);
+}
+
+function showLoaderMessage(msg) {
+  const v = $("#view");
+  if (v) v.innerHTML = '<div class="card"><p class="muted">' + esc(msg) + "</p></div>";
+}
+
+/* generic loader — "bring your own spec" (render.html). Parse + validate +
+ * mount a spec from text; optional data is stashed into #embedded-data for the
+ * view path. mount errors surface in the loader area, never throw out of boot. */
+function loadSpecText(text, dataText) {
+  let env;
+  try { env = parseEnvelope(parseSpecText(text).data); }
+  catch (e) { showLoaderMessage("could not parse spec: " + e.message); return; }
+  const errs = validateEnvelope(env);
+  if (errs.length) { showLoaderMessage("spec invalid: " + errs.join("; ")); return; }
+  if (dataText != null) { const tag = $("#embedded-data"); if (tag) tag.textContent = dataText; }
+  mount(env); mcpConnect(env);
+}
+function loadFiles(files) {
+  let specText = null, dataText = null, pending = files.length;
+  const done = () => { if (--pending > 0) return; if (specText) loadSpecText(specText, dataText); else showLoaderMessage("drop a spec file (.yaml / .json / .md)"); };
+  Array.prototype.forEach.call(files, (f) => {
+    Promise.resolve(f.text()).then((t) => {
+      if (/\.(ya?ml|md)$/i.test(f.name)) specText = t;
+      else { // .json/.jsonl/unknown: probe — a valid envelope kind => spec, else data
+        let isSpec = false;
+        try { isSpec = !!parseEnvelope(JSON.parse(t)).kind; } catch (e) {}
+        if (isSpec && !specText) specText = t; else dataText = t;
+      }
+      done();
+    }, done);
+  });
+}
+function loadSpecUrl(specUrl, dataUrl) {
+  if (typeof fetch !== "function") { showLoaderMessage("?spec= requires fetch"); return; }
+  const get = (u) => fetch(u).then((r) => r.text());
+  get(specUrl)
+    .then((specText) => (dataUrl ? get(dataUrl).then((d) => loadSpecText(specText, d)) : loadSpecText(specText)))
+    .catch((e) => showLoaderMessage("spec fetch failed: " + e.message));
+}
+function wireLoader() {
+  const drop = $("#drop");
+  if (drop && drop.addEventListener) {
+    ["dragover", "dragenter"].forEach((ev) => drop.addEventListener(ev, (e) => { if (e.preventDefault) e.preventDefault(); drop.classList.add("hot"); }));
+    ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { if (e.preventDefault) e.preventDefault(); drop.classList.remove("hot"); }));
+    drop.addEventListener("drop", (e) => { const fl = e.dataTransfer && e.dataTransfer.files; if (fl && fl.length) loadFiles(fl); });
+  }
+  const file = $("#file"); if (file && file.addEventListener) file.addEventListener("change", (e) => { const fl = e.target && e.target.files; if (fl && fl.length) loadFiles(fl); });
+  const pb = $("#pasteBtn"); if (pb) pb.onclick = () => { const p = $("#paste"); if (p && p.value != null) loadSpecText(p.value); };
+}
+
+function boot() {
+  try { const t = localStorage.getItem(THEME_KEY); if (t) applyTheme(t); } catch (e) {}
+  const tb = $("#themeBtn");
+  if (tb) tb.onclick = toggleTheme;
+  wireLoader();
+
+  const search = typeof location !== "undefined" && location.search ? location.search : "";
+  const params = new URLSearchParams(search);
+  if (params.get("spec")) { loadSpecUrl(params.get("spec"), params.get("data")); return; }
+
+  let env = null;
+  try {
+    const tag = $("#embedded-spec");
+    const raw = tag ? tag.textContent.trim() : "";
+    if (raw) env = parseEnvelope(JSON.parse(raw));
+  } catch (e) { showLoaderMessage("embedded spec failed to parse: " + e.message); return; }
+
+  if (!env) { showLoaderMessage("No spec loaded. Drop a spec (.yaml / .json / .md) to render."); return; }
+  const errs = validateEnvelope(env);
+  if (errs.length) { showLoaderMessage("spec invalid: " + errs.join("; ")); return; }
+  mount(env);
+  mcpConnect(env); // progressive enhancement — no-op unless inside an MCP host
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    parseYaml, parseFrontmatter, parseSpecText, parseEnvelope, validateEnvelope, esc,
+    formFields, formBuckets, formCurVal, formFieldError, formEnvQuote,
+    formExportEnv, formExportSecrets, formExportJson,
+    ADAPTERS,
+    emptyDataset, isBundle, isScorecard, mergeBundle, domainFromRunId,
+    viewDomains, viewRunsFor, viewCardOf, viewTranscriptOf,
+    resolveBinding, lookup,
+  };
+}
+if (typeof document !== "undefined") boot();
+
+</script>
+</body>
+</html>

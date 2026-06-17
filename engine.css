@@ -1,0 +1,121 @@
+/* spec-renderer engine styles.
+   in^loop Cabin theme tokens — vendored from the in^loop design system
+   (panel-tiling/design-system/cabin.css). Fonts fall back to system stacks:
+   no @import, so the file is offline / CSP-clean / single-artifact.
+   Lifted verbatim from eval-dashboard so compiled views render identically. */
+:root, [data-cabin="day"] {
+  --cabin-paper:#EDE3CF; --cabin-paper-2:#E4D8BE; --cabin-paper-3:#D9C9A8; --cabin-paper-inset:#F4ECDA;
+  --cabin-ink:#2A1F18; --cabin-ink-2:#4A3828; --cabin-ink-3:#6B5340; --cabin-ink-4:#9A8770;
+  --cabin-rule:rgba(60,30,15,0.10); --cabin-rule-2:rgba(60,30,15,0.18); --cabin-rule-strong:rgba(60,30,15,0.28);
+  --cabin-accent:#B85A3E; --cabin-accent-deep:#8E4530; --cabin-accent-soft:rgba(184,90,62,0.14); --cabin-accent-wash:rgba(184,90,62,0.06);
+  --cabin-ok:#5F6B3D; --cabin-warn:#C28A3A; --cabin-danger:#A8523C; --cabin-info:#6B7F8F;
+}
+[data-cabin="night"] {
+  --cabin-paper:#14181B; --cabin-paper-2:#1A1F22; --cabin-paper-3:#21272B; --cabin-paper-inset:#1E2428;
+  --cabin-ink:#ECE3CF; --cabin-ink-2:#C9BFA8; --cabin-ink-3:#8E8470; --cabin-ink-4:#5C544A;
+  --cabin-rule:rgba(220,210,190,0.08); --cabin-rule-2:rgba(220,210,190,0.16); --cabin-rule-strong:rgba(220,210,190,0.28);
+  --cabin-accent:#D97757; --cabin-accent-deep:#B85A3E; --cabin-accent-soft:rgba(217,119,87,0.16); --cabin-accent-wash:rgba(217,119,87,0.06);
+  --cabin-ok:#8a9a5b; --cabin-warn:#d6a24f; --cabin-danger:#c8694f; --cabin-info:#8fa3b3;
+}
+:root {
+  --font-serif:'Iowan Old Style','Palatino Linotype',Georgia,serif;
+  --font-sans:-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  --font-mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--cabin-paper);color:var(--cabin-ink);
+  font:15px/1.5 var(--font-sans);-webkit-font-smoothing:antialiased}
+header{position:sticky;top:0;z-index:5;background:var(--cabin-paper);
+  border-bottom:1px solid var(--cabin-rule);padding:14px 22px;display:flex;
+  gap:16px 22px;align-items:center;flex-wrap:wrap}
+.brand{font-family:var(--font-serif);font-size:20px;font-weight:400;letter-spacing:-.01em}
+.brand .caret{color:var(--cabin-accent);font-weight:600;margin-right:2px}
+.brand .sub{color:var(--cabin-ink-3);font-size:14px;font-family:var(--font-sans)}
+nav.tabs{display:flex;gap:4px;margin-left:6px}
+.tab{padding:5px 12px;border-radius:999px;border:1px solid transparent;cursor:pointer;
+  font-size:13px;color:var(--cabin-ink-2);background:transparent}
+.tab:hover{background:var(--cabin-paper-2)}
+.tab.on{background:var(--cabin-accent-soft);border-color:var(--cabin-accent);color:var(--cabin-ink)}
+.pickers{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.pickers label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--cabin-ink-3);
+  display:flex;flex-direction:column;gap:3px}
+input,select{background:var(--cabin-paper-inset);color:var(--cabin-ink);border:1px solid var(--cabin-rule-2);
+  border-radius:7px;padding:6px 8px;font:13px var(--font-mono);max-width:280px}
+input:focus,select:focus{outline:0;border-color:var(--cabin-accent)}
+button{background:var(--cabin-accent);color:var(--cabin-paper-inset);border:0;border-radius:7px;
+  padding:7px 13px;font-weight:600;font-size:13px;cursor:pointer}
+button.ghost{background:transparent;color:var(--cabin-ink-2);border:1px solid var(--cabin-rule-2)}
+button.ghost:hover{border-color:var(--cabin-accent);color:var(--cabin-ink)}
+button:disabled{opacity:.4;cursor:default}
+main{max-width:1040px;margin:0 auto;padding:22px}
+.card{background:var(--cabin-paper-inset);border:1px solid var(--cabin-rule);border-radius:12px;
+  padding:18px 20px;margin:14px 0;box-shadow:0 1px 2px rgba(0,0,0,0.04)}
+.row{display:flex;gap:18px;align-items:baseline;flex-wrap:wrap}
+.chip{font-size:11px;font-family:var(--font-mono);padding:2px 8px;border-radius:999px;
+  border:1px solid var(--cabin-rule-2);color:var(--cabin-ink-3)}
+.big{font-family:var(--font-serif);font-size:34px;line-height:1}
+.muted{color:var(--cabin-ink-3)}
+.micro{font-size:12px;color:var(--cabin-ink-3)}
+h2.view-h{font-family:var(--font-serif);font-weight:400;font-size:24px;margin:6px 0 2px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.ok{color:var(--cabin-ok)} .bad{color:var(--cabin-danger)} .warn{color:var(--cabin-warn)} .info{color:var(--cabin-info)}
+.bg-ok{background:var(--cabin-ok)} .bg-bad{background:var(--cabin-danger)} .bg-warn{background:var(--cabin-warn)} .bg-info{background:var(--cabin-info)} .bg-accent{background:var(--cabin-accent)}
+.banner{border-radius:10px;padding:11px 14px;margin:10px 0;font-size:14px;border:1px solid}
+.banner.fail{background:var(--cabin-accent-soft);border-color:var(--cabin-danger);color:var(--cabin-ink)}
+.banner.pass{background:transparent;border-color:var(--cabin-rule-2);color:var(--cabin-ink-3)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--cabin-rule)}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--cabin-ink-3);font-weight:600}
+td.num{font-family:var(--font-mono);text-align:right}
+tr.regressed td{background:var(--cabin-accent-wash)}
+.metric-row{display:grid;grid-template-columns:240px 70px 1fr;gap:12px;align-items:center;padding:6px 0}
+.metric-row .name{font-family:var(--font-mono);font-size:13px}
+.link{color:var(--cabin-accent-deep);cursor:pointer;text-decoration:none}
+.link:hover{text-decoration:underline}
+/* transcript / timeline */
+.turn{border-left:2px solid var(--cabin-rule-2);padding:2px 0 2px 14px;margin:12px 0}
+.turn.assistant{border-color:var(--cabin-accent-soft)}
+.turn.user{border-color:var(--cabin-rule-2)}
+.turn .who{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--cabin-ink-4);margin-bottom:4px}
+.blk{margin:7px 0}
+.blk.text{color:var(--cabin-ink-2);font-style:italic}
+.toolcall,.toolresult{background:var(--cabin-paper-3);border:1px solid var(--cabin-rule);border-radius:8px;padding:8px 11px}
+.toolcall .name{font-family:var(--font-mono);font-weight:600;color:var(--cabin-accent-deep)}
+.toolresult.err{border-color:var(--cabin-danger)}
+.toolresult .tag,.toolcall .arrow{font-size:11px;color:var(--cabin-ink-3);text-transform:uppercase;letter-spacing:.06em}
+.submit{background:var(--cabin-accent-soft);border:1px solid var(--cabin-accent)}
+.submit .name{color:var(--cabin-ink)}
+pre{font-family:var(--font-mono);font-size:12px;line-height:1.5;background:transparent;margin:4px 0 0;
+  white-space:pre-wrap;word-break:break-word;color:var(--cabin-ink-2)}
+/* loader */
+.drop{border:1.5px dashed var(--cabin-rule-2);border-radius:10px;padding:22px;text-align:center;color:var(--cabin-ink-3)}
+.drop.hot{border-color:var(--cabin-accent);color:var(--cabin-ink)}
+details summary{cursor:pointer;color:var(--cabin-ink-3);font-size:13px}
+textarea{width:100%;min-height:90px;margin-top:8px;background:var(--cabin-paper-inset);color:var(--cabin-ink);
+  border:1px solid var(--cabin-rule-2);border-radius:7px;padding:8px;font:12px var(--font-mono)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+footer{max-width:1040px;margin:0 auto;padding:8px 22px 40px;color:var(--cabin-ink-4);font-size:12px}
+footer a{color:var(--cabin-accent-deep)}
+/* ---- FORM widgets (Phase 1) — re-themed onto Cabin tokens ---- */
+.field{display:grid;grid-template-columns:1fr 320px;gap:14px 22px;padding:11px 0;border-top:1px solid var(--cabin-rule)}
+.field:first-of-type{border-top:0}
+.field .key{font-family:var(--font-mono);font-weight:600;color:var(--cabin-ink)}
+.field .label{color:var(--cabin-ink-2);font-size:13px}
+.field .help{color:var(--cabin-ink-3);font-size:12px;font-style:italic}
+.field input,.field select{width:100%;max-width:none}
+.badge{font-size:10px;font-family:var(--font-mono);padding:1px 7px;border-radius:999px;margin-left:8px;
+  text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--cabin-rule-2)}
+.b-known{color:var(--cabin-ok);border-color:var(--cabin-ok)}
+.b-default{color:var(--cabin-info);border-color:var(--cabin-info)}
+.b-fill{color:var(--cabin-warn);border-color:var(--cabin-warn)}
+.field.req input,.field.req select{border-color:var(--cabin-warn)}
+.field.invalid input,.field.invalid select{border-color:var(--cabin-danger)}
+.field.scoped{opacity:.5}
+.field.scoped .label{text-decoration:line-through}
+.err{color:var(--cabin-danger);font-size:12px;margin-top:4px}
+.group-title{font-family:var(--font-serif);font-size:18px;font-weight:400;margin:0 0 2px}
+.note{color:var(--cabin-ink-3);font-size:13px;margin:2px 0 8px}
+.bar{position:sticky;bottom:0;background:var(--cabin-paper);border-top:1px solid var(--cabin-rule-2);
+  padding:11px 22px;display:flex;gap:12px;align-items:center}
+.bar .count{margin-right:auto;color:var(--cabin-ink-3);font-size:13px}
+a.dl{color:var(--cabin-accent-deep)}
