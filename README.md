@@ -1,12 +1,12 @@
 # spec-renderer
 
-One single-file, no-build, offline HTML renderer that an LLM drives from a
-markdown / YAML / JSON **spec**. One engine renders two kinds of spec — a
-**form** (a config-intake form that exports `.env` / JSON) and a **view** (a
-read-only dashboard over JSON data). A spec compiles to a single self-contained
-HTML file, or is served to an MCP host as a `ui://` resource. The repo ships a
-web-app `.env` form example, an agentic-eval-harness dashboard, and a generic
-"bring your own spec" renderer.
+Build a config-intake **form** or a read-only **dashboard** and compile it to a
+single, self-contained HTML file — no build step, no dependencies, works offline
+(`file://`). The form or view is declared as a markdown / YAML / JSON **spec**
+(LLM-authorable); one engine renders both kinds. A spec can also be served to an
+MCP host as a `ui://` resource. The repo ships a web-app `.env` form, an
+agentic-eval-harness dashboard, and `render.html` — a blank renderer you drop
+your own spec into.
 
 ## How it works
 
@@ -31,9 +31,9 @@ web-app `.env` form example, an agentic-eval-harness dashboard, and a generic
 ## Spec kinds
 
 - **`form`** — a JSON-Schema subset (`type`/`enum`/`required`/`properties`/
-  `pattern`/`format`/`title`/`description`) **plus** inline extension keywords
-  the renderer reads and standard validators ignore: `status`
-  (`known`/`default`/`fill`/`scoped-out`), `secret`, `group`, `help`, and
+  `format`/`title`/`description`; `format` covers `ipv4`/`email`/`uri`) **plus**
+  inline extension keywords the renderer reads and standard validators ignore:
+  `status` (`known`/`default`/`fill`/`scoped-out`), `secret`, `group`, and
   top-level `x-forge-*`. Valid JSON Schema, with a dual-use config-intake
   workflow (status/secret/grouping/exports) layered on top.
 - **`view`** — a small bespoke widget vocabulary (stat-cards, banner, metric-bars
@@ -61,7 +61,8 @@ just mcp                           # run the MCP Apps server over stdio
 
 Outputs are single-file, offline, and CSP-clean. `render.html` ships with an
 empty spec and accepts a dropped / pasted spec or `?spec=URL` (`&data=URL`).
-Authoring guide: `SPEC.md`. **118 dependency-free tests** (`just test`).
+Authoring guide: `SPEC.md`. **118 dependency-free test cases** (`just test` /
+`node --test`; several are generated from fixture tables).
 
 
 ## License

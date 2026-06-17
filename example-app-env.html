@@ -159,7 +159,7 @@ a.dl{color:var(--cabin-accent-deep)}
 /* =====================================================================
  * spec-renderer engine  —  one engine, two kinds (form | view)
  *
- * Classic script (NO import/export): inlined verbatim by compile-spec.mjs
+ * Classic script (no ES-module import/export syntax; uses module.exports for tests): inlined verbatim by compile-spec.mjs
  * into the single attribute-less <script> of a compiled output, AND loaded
  * under node:vm by the tests. Pure functions are exposed via module.exports
  * (guarded); boot() runs only when a document is present. This dual-runtime

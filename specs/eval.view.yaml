@@ -5,7 +5,7 @@ kind: view
 x-forge-name: eval-dashboard
 title: "agentic-eval-harness"
 adapters: [eval-scoring]
-footer: "Renders <a href=\"https://github.com/in-loop/agentic-eval-harness\">agentic-eval-harness</a> JSON (scorecards + transcripts). The harness is the source of truth for all metrics and scoring."
+footer: "Renders <a href=\"https://github.com/chris-youngblut-solutions/agentic-eval-harness\">agentic-eval-harness</a> JSON (scorecards + transcripts). The harness is the source of truth for all metrics and scoring."
 views:
   - key: overview
     label: "Overview"
