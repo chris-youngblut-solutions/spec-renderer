@@ -1,0 +1,43 @@
+name: Feature request
+description: Propose a new feature or enhancement for spec-renderer.
+title: "[feat] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests should explain the *problem*, not jump to a
+        solution. We may have a different solution in mind that fits
+        the codebase better.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do? Why is the current behavior insufficient?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution (optional)
+      description: If you have one in mind. Don't worry if you don't — we'll figure it out.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you've tried, or other approaches you've ruled out and why.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, screenshots, related issues.
+    validations:
+      required: false

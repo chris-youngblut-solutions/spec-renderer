@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a defect in spec-renderer.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill out
+        the sections below — partial reports often can't be acted on.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of spec-renderer are you running? (`spec-renderer --version` or check `CHANGELOG.md`)
+      placeholder: "v0.3.2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug. Include exact error messages.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps to reproduce. Code snippet or commands preferred.
+      placeholder: |
+        1. Run `...`
+        2. Observe `...`
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, runtime version, anything relevant.
+      placeholder: |
+        - OS: Fedora 43
+        - Runtime: ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / output
+      render: shell

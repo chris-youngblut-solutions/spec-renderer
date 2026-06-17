@@ -1,0 +1,56 @@
+# Dependabot configuration.
+# - Daily for github-actions (small surface, easy to review).
+# - Weekly for language ecosystems (review fatigue threshold).
+# - Group minor + patch updates so we don't get N PRs per release.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Cargo (Rust) — only present in repos that have Cargo.toml at root.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # uv / pip (Python) — only present if pyproject.toml at root.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # npm/pnpm — only present if package.json at root.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

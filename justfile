@@ -25,3 +25,8 @@ mcp:
 
 # full check: tests (compiled-output validity is asserted inside the tests)
 check: test
+
+# build the release artifacts (the compiled single-file renderers) into dist/
+build: embed
+    mkdir -p dist
+    cp example-app-env.html eval-dashboard.html render.html dist/
