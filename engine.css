@@ -1,6 +1,6 @@
 /* spec-renderer engine styles.
-   in^loop Cabin theme tokens — vendored from the in^loop design system
-   (panel-tiling/design-system/cabin.css). Fonts fall back to system stacks:
+   Cabin day/night theme tokens — a small self-contained token set.
+   Fonts fall back to system stacks:
    no @import, so the file is offline / CSP-clean / single-artifact.
    Lifted verbatim from eval-dashboard so compiled views render identically. */
 :root, [data-cabin="day"] {

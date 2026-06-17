@@ -16,7 +16,7 @@ your own spec into.
   inlined in the browser and, unchanged, under `node:vm` for tests (pure
   functions are exposed via `module.exports`; `boot()` runs only when a document
   is present).
-- **`engine.css`** — in^loop Cabin day/night tokens + widget styles. No
+- **`engine.css`** — Cabin day/night theme tokens + widget styles. No
   `@import`, no web fonts — offline / CSP-clean.
 - **`engine.html.tmpl`** — the skeleton, with splice points for CSS, JS, the
   embedded spec, and optional embedded data. The engine's logic is the single
