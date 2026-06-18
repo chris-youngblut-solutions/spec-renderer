@@ -1,10 +1,14 @@
 # spec-renderer
 
-Build a config-intake **form** or a read-only **dashboard** and compile it to a
-single, self-contained HTML file — no build step, no dependencies, works offline
-(`file://`). The form or view is declared as a markdown / YAML / JSON **spec**
-(LLM-authorable); one engine renders both kinds. A spec can also be served to an
-MCP host as a `ui://` resource. The repo ships a web-app `.env` form, an
+A no-build tool that compiles a markdown / YAML / JSON spec into a single, self-contained HTML form or read-only dashboard.
+
+## What it does
+
+Takes a spec — declared as markdown / YAML / JSON, and LLM-authorable — and
+renders either a config-intake **form** or a read-only **dashboard**, compiled to
+a single self-contained HTML file: no build step, no dependencies, works offline
+(`file://`). One engine renders both kinds. A spec can also be served to an MCP
+host as a `ui://` resource. The repo ships a web-app `.env` form, an
 agentic-eval-harness dashboard, and `render.html` — a blank renderer you drop
 your own spec into.
 
@@ -64,6 +68,14 @@ empty spec and accepts a dropped / pasted spec or `?spec=URL` (`&data=URL`).
 Authoring guide: `SPEC.md`. **118 dependency-free test cases** (`just test` /
 `node --test`; several are generated from fixture tables).
 
+## Status
+
+Shipped public at 0.1.0 (SemVer; Decision 5). Built: the single-file engine
+(`engine.js`/`engine.css`/`engine.html.tmpl`), `form` and `view` renderers, the
+`compile-spec.mjs` author-time compiler, the `render.html` drop-in renderer, the
+MCP Apps server (`mcp-server/server.mjs`, SEP-1865), and 118 dependency-free test
+cases. Shipped examples: the web-app `.env` form and the agentic-eval-harness
+dashboard.
 
 ## License
 
