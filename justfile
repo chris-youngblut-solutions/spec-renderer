@@ -34,6 +34,7 @@ embed:
     node scripts/compile-spec.mjs specs/settings.form.yaml -o settings.html
     node scripts/compile-spec.mjs specs/eval.view.yaml --data data/eval-sample.json -o eval-dashboard.html
     node scripts/compile-spec.mjs specs/example-live.view.yaml -o example-live.html
+    node scripts/compile-spec.mjs specs/live-console.view.yaml --data data/eval-sample.json -o live-console.html
     node scripts/compile-spec.mjs --blank -o render.html
 
 # run the MCP Apps server (SEP-1865) over stdio — exposes the renderers as
@@ -47,4 +48,4 @@ check: test
 # build the release artifacts (the compiled single-file renderers) into dist/
 build: embed
     mkdir -p dist
-    cp example-app-env.html survey.html settings.html eval-dashboard.html example-live.html render.html dist/
+    cp example-app-env.html survey.html settings.html eval-dashboard.html example-live.html live-console.html render.html dist/
