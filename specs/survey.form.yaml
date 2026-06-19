@@ -1,0 +1,82 @@
+# survey.form.yaml — a feedback/survey intake form. A proof spec, hand-authored in
+# the documented format; nothing here is special-cased in the engine. It exercises:
+#   - enum            (single-choice select)          ROLE, FREQUENCY, OVERALL
+#   - boolean         (checkbox)                       WANTS_FOLLOWUP, CONSENT
+#   - array           (multi-select; items.enum)       CHANNELS
+#   - textarea        (long answer; format: textarea)  COMMENTS
+#   - x-forge-when    (follow-up shown only when a prior answer matches)
+#                                                       FOLLOWUP_EMAIL (when WANTS_FOLLOWUP=true)
+# All values travel as strings; quote numeric defaults so they stay strings.
+"$schema": "https://json-schema.org/draft/2020-12/schema"
+type: "object"
+x-forge-kind: "form"
+x-forge-name: "product-survey"
+title: "Product feedback survey"
+x-forge-outputs: ["env", "json"]
+x-forge-groups:
+  - id: "about"
+    title: "About you"
+    note: "A couple of quick questions so we can read your feedback in context."
+  - id: "feedback"
+    title: "Your feedback"
+  - id: "followup"
+    title: "Follow-up"
+    note: "Optional — only if you said you're open to it."
+required: ["ROLE", "OVERALL", "CONSENT"]
+properties:
+  ROLE:
+    type: "string"
+    enum: ["developer", "designer", "product-manager", "ops", "other"]
+    title: "Your role"
+    description: "Which best describes what you do day to day."
+    status: "fill"
+    group: "about"
+  FREQUENCY:
+    type: "string"
+    enum: ["daily", "weekly", "monthly", "rarely"]
+    default: "weekly"
+    title: "How often do you use it?"
+    status: "default"
+    group: "about"
+  CHANNELS:
+    type: "array"
+    items:
+      enum: ["email", "slack", "rss", "in-app", "none"]
+    title: "How should we reach you with updates?"
+    description: "Pick any that apply."
+    status: "known"
+    group: "about"
+  OVERALL:
+    type: "string"
+    enum: ["1", "2", "3", "4", "5"]
+    title: "Overall, how satisfied are you? (1-5)"
+    status: "fill"
+    group: "feedback"
+  COMMENTS:
+    type: "string"
+    format: "textarea"
+    title: "What's working, and what isn't?"
+    description: "Free text — as much or as little as you like."
+    status: "known"
+    group: "feedback"
+  WANTS_FOLLOWUP:
+    type: "boolean"
+    title: "Open to a follow-up conversation?"
+    default: "false"
+    status: "default"
+    group: "feedback"
+  CONSENT:
+    type: "boolean"
+    title: "I consent to my responses being stored."
+    default: "false"
+    status: "fill"
+    group: "feedback"
+  FOLLOWUP_EMAIL:
+    type: "string"
+    format: "email"
+    title: "Where can we reach you?"
+    description: "Shown because you're open to a follow-up."
+    status: "known"
+    x-forge-when:
+      WANTS_FOLLOWUP: "true"
+    group: "followup"

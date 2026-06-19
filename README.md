@@ -8,9 +8,9 @@ Takes a spec — declared as markdown / YAML / JSON, and LLM-authorable — and
 renders either a config-intake **form** or a read-only **dashboard**, compiled to
 a single self-contained HTML file: no build step, no dependencies, works offline
 (`file://`). One engine renders both kinds. A spec can also be served to an MCP
-host as a `ui://` resource. The repo ships a web-app `.env` form, an
-agentic-eval-harness dashboard, and `render.html` — a blank renderer you drop
-your own spec into.
+host as a `ui://` resource. The repo ships a web-app `.env` form, a survey form, a
+settings panel, an agentic-eval-harness dashboard, and `render.html` — a blank
+renderer you drop your own spec into.
 
 ## How it works
 
@@ -34,16 +34,22 @@ your own spec into.
 
 ## Spec kinds
 
-- **`form`** — a JSON-Schema subset (`type`/`enum`/`required`/`properties`/
-  `format`/`title`/`description`; `format` covers `ipv4`/`email`/`uri`) **plus**
-  inline extension keywords the renderer reads and standard validators ignore:
-  `status` (`known`/`default`/`fill`/`scoped-out`), `secret`, `group`, and
-  top-level `x-forge-*`. Valid JSON Schema, with a dual-use config-intake
-  workflow (status/secret/grouping/exports) layered on top.
-- **`view`** — a small bespoke widget vocabulary (stat-cards, banner, metric-bars
-  [hand-rolled SVG], table, diff-table, timeline, cross-grid, key-value);
-  bindings are lookups + named `adapter.fn` only. The eval recompute logic is the
-  named `eval-scoring` adapter.
+- **`form`** — a JSON-Schema subset: per-property `type`
+  (`string`/`integer`/`number`/`boolean`/`array`), `enum`, `required`,
+  `properties`, `format` (`ipv4`/`email`/`uri`, or `textarea`), `title`,
+  `description`, and the validation keywords `minimum`/`maximum`/`minLength`/
+  `maxLength`/`pattern` — **plus** inline extension keywords the renderer reads and
+  standard validators ignore: `status` (`known`/`default`/`fill`/`scoped-out`),
+  `secret`, `group`, `x-forge-multiline`, `x-forge-when` (declarative conditional
+  visibility), and top-level `x-forge-*`. Booleans render as checkboxes, arrays as
+  multi-select / list widgets. Forms validate, persist edits locally, prefill from
+  `--data` (config editor), and export `.env` / JSON / YAML / TOML / annotated-env.
+- **`view`** — a fixed widget catalog (`heading`, `caption`, `chips`, `stat-cards`,
+  `hard-gate-banner`, `metric-rollup` [hand-rolled SVG bars], `case-table` [with
+  filter + sortable columns], `regression-diff`, `transcript`, `cross-grid`, `trend`
+  [hand-rolled SVG line chart]); bindings are lookups + named `adapter.fn` only, and
+  all computation lives in a named engine adapter (e.g. `eval-scoring`), never in the
+  spec.
 
 ## MCP Apps
 
@@ -52,30 +58,39 @@ implementing the MCP Apps extension (SEP-1865). It exposes the renderers as
 `ui://` resources (`text/html;profile=mcp-app`) and `render_form` / `render_view`
 tools, so an MCP host can render a form or dashboard from a spec. The engine does
 the `ui/initialize` handshake and accepts host-pushed data when embedded in a
-host, and runs fully standalone otherwise.
+host, and a rendered form shows a **Submit to agent** button that returns the
+assembled public answers to the host (secrets excluded). It runs fully standalone
+otherwise.
 
 ## Build
 
 ```sh
-just test                          # all node:test files (no deps, no browser)
+just test                          # the node:test suite (no deps, no browser)
 just compile <spec> <out.html>     # inline one spec to a self-contained HTML
+just watch <spec> <out.html>       # recompile on every save (fs.watch, no deps)
+just validate <spec>               # lint a spec against the authoring contract
+just convert-schema <schema> <out> # downconvert a JSON Schema into a form spec
 just embed                         # compile the shipped examples
+just build                         # compile + copy the artifacts into dist/
 just mcp                           # run the MCP Apps server over stdio
 ```
 
 Outputs are single-file, offline, and CSP-clean. `render.html` ships with an
 empty spec and accepts a dropped / pasted spec or `?spec=URL` (`&data=URL`).
-Authoring guide: `SPEC.md`. **118 dependency-free test cases** (`just test` /
-`node --test`; several are generated from fixture tables).
+Authoring guide: `SPEC.md`; use cases: `USECASES.md`. The dependency-free
+`node:test` suite runs with `just test` (`node --test`; several cases are
+generated from fixture tables).
 
 ## Status
 
 Shipped public at 0.1.0 (SemVer; Decision 5). Built: the single-file engine
 (`engine.js`/`engine.css`/`engine.html.tmpl`), `form` and `view` renderers, the
-`compile-spec.mjs` author-time compiler, the `render.html` drop-in renderer, the
-MCP Apps server (`mcp-server/server.mjs`, SEP-1865), and 118 dependency-free test
-cases. Shipped examples: the web-app `.env` form and the agentic-eval-harness
-dashboard.
+`compile-spec.mjs` author-time compiler (with `--watch`), a spec linter
+(`validate-spec.mjs`) and a JSON-Schema → form-spec converter
+(`jsonschema-to-spec.mjs`), the `render.html` drop-in renderer, the MCP Apps server
+(`mcp-server/server.mjs`, SEP-1865, with form submit-back), and the dependency-free
+`node:test` suite. Shipped examples: the web-app `.env` form, a survey form, a
+settings panel, and the agentic-eval-harness dashboard.
 
 ## License
 

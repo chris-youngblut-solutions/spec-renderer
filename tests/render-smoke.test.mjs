@@ -59,11 +59,11 @@ function clickTab(label) {
   return serialize(registry["#view"]);
 }
 
-test("boot renders the overview by default; exactly four tabs", () => {
+test("boot renders the overview by default; five tabs", () => {
   const view = serialize(registry["#view"]);
   assert.match(view, /passed/);
   assert.match(view, /score/);
-  assert.equal(registry["#tabs"].children.length, 4);
+  assert.equal(registry["#tabs"].children.length, 5); // overview, diff, transcript, cross, trend
 });
 
 test("Overview tab renders the hard-gate banner", () => {

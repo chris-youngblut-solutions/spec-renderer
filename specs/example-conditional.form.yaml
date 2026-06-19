@@ -1,0 +1,57 @@
+# example-conditional.form.yaml — proof spec for x-forge-when (declarative
+# conditional visibility). TLS path fields show only when TLS is enabled; the
+# S3 bucket shows only when STORAGE == s3. NOTES carries a deliberately MALFORMED
+# x-forge-when (an array) to document the always-active fallback.
+"$schema": "https://json-schema.org/draft/2020-12/schema"
+type: "object"
+x-forge-kind: "form"
+x-forge-name: "conditional-demo"
+title: "Conditional visibility demo"
+x-forge-outputs: ["env", "json"]
+x-forge-groups:
+  - id: "tls"
+    title: "TLS"
+  - id: "storage"
+    title: "Storage"
+required: ["STORAGE"]
+properties:
+  TLS_ENABLED:
+    type: "boolean"
+    title: "Enable TLS"
+    default: "false"
+    status: "default"
+    group: "tls"
+  TLS_CERT_PATH:
+    type: "string"
+    title: "Certificate path"
+    default: "/etc/ssl/cert.pem"
+    status: "fill"
+    group: "tls"
+    x-forge-when:
+      TLS_ENABLED: "true"
+  TLS_KEY_PATH:
+    type: "string"
+    title: "Private key path"
+    status: "fill"
+    group: "tls"
+    x-forge-when:
+      TLS_ENABLED: "true"
+  STORAGE:
+    type: "string"
+    enum: ["local", "s3"]
+    default: "local"
+    status: "fill"
+    group: "storage"
+  S3_BUCKET:
+    type: "string"
+    title: "S3 bucket"
+    status: "fill"
+    group: "storage"
+    x-forge-when:
+      STORAGE: "s3"
+  NOTES:
+    type: "string"
+    title: "Notes"
+    status: "known"
+    group: "storage"
+    x-forge-when: ["this", "is", "malformed"]

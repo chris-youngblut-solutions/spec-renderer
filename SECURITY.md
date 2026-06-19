@@ -37,6 +37,31 @@ Out of scope:
 - Third-party dependencies — please report those upstream.
 - Issues in deployment environments not controlled by this project.
 
+## Live data (`x-forge-datasource`)
+
+A compiled artifact is inert and offline by default: its CSP sets `connect-src 'none'`,
+so it can make no network requests. A *view* may opt into live data with
+`x-forge-datasource`, which is the **only** way a compiled artifact reaches the network.
+The security posture for that path:
+
+- **The browser never talks to a database.** It fetches a **read-only internal endpoint**
+  (a thin backend-for-frontend or a pre-baked materialized view) that returns the same
+  read-only data-bundle shape used at compile time. No SQL is ever issued from the page.
+- **No credential is read from the spec or embedded in the artifact.** The HTML file is the
+  artifact, so anything in it is public. Authentication rides the **user's own session**
+  (`auth: session` → `fetch(credentials: 'include')`) or **network membership** (a tailnet,
+  or an access proxy such as Cloudflare Access / IAP). The renderer never sends a token,
+  header, or key — and the linter warns if a spec author adds one.
+- **Egress is locked by CSP.** The compiled file's `connect-src` is pinned to exactly the
+  declared endpoint origin (a same-origin path → `'self'`); a tampered spec cannot exfiltrate
+  to another origin. `script-src` is hash-pinned (no `'unsafe-inline'`) in every artifact, so
+  injected inline script cannot run regardless.
+- **Recommended deployment:** serve the dashboard and its endpoint behind a tailnet or an
+  access proxy so the endpoint has no public attack surface, and so the `.html` — which holds
+  nothing sensitive — is only reachable by authorized users.
+
+Inside an MCP host the live fetch is disabled; data arrives via the host push instead.
+
 ## Verifying release artifacts
 
 All releases are signed with **cosign keyless** via GitHub Actions OIDC

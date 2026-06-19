@@ -56,3 +56,14 @@ views:
       - widget: caption
         text: "Latest run per domain — one engine, N domains."
       - widget: cross-grid
+  - key: trend
+    label: "Trend"
+    select: {domain: true, run: false, case: false}
+    widgets:
+      - widget: heading
+        value: "$domain"
+      - widget: caption
+        text: "Total score across this domain's runs — oldest to newest."
+      - widget: trend
+        source: "eval-scoring.scoreTrend(dataset, domain)"
+        caption: "score over runs"

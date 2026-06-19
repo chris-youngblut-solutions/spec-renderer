@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/webapp.config.schema.json",
+  "title": "Web app config",
+  "type": "object",
+  "required": ["PORT", "ADMIN_EMAIL", "NESTED"],
+  "additionalProperties": false,
+  "properties": {
+    "PORT": {
+      "type": "integer",
+      "title": "Port",
+      "default": 3000,
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "RATE": {
+      "type": "number",
+      "title": "Rate",
+      "default": 1.5
+    },
+    "NODE_ENV": {
+      "type": "string",
+      "enum": ["development", "production", "test"],
+      "default": "production"
+    },
+    "ADMIN_EMAIL": {
+      "type": "string",
+      "format": "email"
+    },
+    "HOMEPAGE": {
+      "type": "string",
+      "format": "hostname"
+    },
+    "FEATURE_FLAG": {
+      "type": "boolean",
+      "default": false
+    },
+    "REGIONS": {
+      "type": "array",
+      "items": { "enum": ["us", "eu", "ap"] },
+      "minItems": 1
+    },
+    "TAGS": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "NESTED": {
+      "type": "object",
+      "properties": { "x": { "type": "string" } }
+    },
+    "EITHER": {
+      "oneOf": [{ "type": "string" }, { "type": "integer" }]
+    },
+    "LINKED": {
+      "$ref": "#/$defs/other"
+    }
+  },
+  "$defs": {
+    "other": { "type": "string" }
+  }
+}

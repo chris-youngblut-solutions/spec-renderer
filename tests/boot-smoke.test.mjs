@@ -69,6 +69,6 @@ test("boot: form spec dispatches to the form renderer", () => {
   const spec = 'type: object\nx-forge-name: cfg\ntitle: Cfg\nproperties:\n  A:\n    type: string\n    status: fill';
   const { html } = compile({ specText: spec, dataText: null });
   const view = boot(html);
-  assert.match(view, /class="key">A</);   // the field key rendered
+  assert.match(view, /class="key"[^>]*>A</);   // the field key rendered (untitled → a <label for>)
   assert.match(view, /b-fill/);            // its status badge — unambiguously a form
 });

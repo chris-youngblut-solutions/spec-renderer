@@ -1,0 +1,37 @@
+# example-bad.lint.yaml — INTENTIONALLY BROKEN. Exercises the validate-spec linter:
+# it should report multiple ERRORS and WARNINGS. Not a runnable spec; do not embed.
+# (Annotations are on their own lines: the engine's YAML subset does not strip an
+# inline `# comment` that follows a flow collection like [..].)
+type: "object"
+x-forge-kind: "form"
+x-forge-name: "bad-demo"
+title: "Bad demo"
+# ERROR: bogus-output outside the x-forge-outputs vocabulary; json-only => secret warning
+x-forge-outputs: ["json", "bogus-output"]
+# WARNING: unknown top-level key
+x-forge-bogus-top: "nope"
+x-forge-groups:
+  - {id: "server", title: "Server"}
+# ERROR: GHOST_KEY is absent from properties
+required: ["PORT", "GHOST_KEY"]
+properties:
+  PORT:
+    type: "integer"
+    default: "3000"
+    status: "fill"
+    group: "server"
+  MODE:
+    type: "string"
+    enum: ["a", "b"]
+    default: "z"                              # ERROR: default not in enum
+    status: "weird"                           # ERROR: status outside enum
+    group: "no-such-group"                    # ERROR: group ref does not resolve
+    nonsense: true                            # WARNING: unknown per-property keyword
+  API_SECRET:
+    type: "string"
+    secret: true                              # WARNING: secret + json-only output
+    status: "fill"
+    group: "server"
+    # ERROR: x-forge-when references a non-existent key
+    x-forge-when:
+      MISSING_KEY: "true"

@@ -1,0 +1,53 @@
+# example-live.view.yaml — a VIEW that pulls LIVE data (opt-in) instead of baking
+# it in. Demonstrates x-forge-datasource: the dashboard polls a READ-ONLY internal
+# endpoint that returns the same {domains: {...}} bundle shape, and the engine merges
+# + re-renders. The browser never touches a database and never holds a credential.
+#
+# `url` here is a ROOT-RELATIVE same-origin path -> the compiled file's CSP locks
+# connect-src to 'self' (no external host). Serve this .html and the /api/eval-data
+# endpoint from the same origin (ideally behind a tailnet or access proxy). With
+# x-forge-datasource removed, this spec is a fully offline view like any other.
+#
+#   just compile specs/example-live.view.yaml example-live.html   # -> connect-src 'self'
+#
+kind: view
+x-forge-name: example-live
+title: "Live eval dashboard"
+adapters: [eval-scoring]
+x-forge-datasource:
+  url: /api/eval-data        # absolute https URL, or a root-relative same-origin path
+  mode: poll                 # poll (default) | sse
+  intervalMs: 15000          # poll cadence; clamped to 1s..1h
+  auth: session              # session (sends the user's cookies) | none (default)
+footer: "Live view — data is fetched from a read-only internal endpoint; the browser issues no SQL."
+views:
+  - key: overview
+    label: "Overview"
+    select: {domain: true, run: after, case: false}
+    widgets:
+      - widget: heading
+        value: "$domain"
+      - widget: chips
+        source: card
+        fields: [run_id, backend, model]
+      - widget: stat-cards
+        cards:
+          - value: "eval-scoring.passedCount(card)"
+            denom: "{card.cases.length}"
+            label: "cases passed"
+          - value: "eval-scoring.totalScore(card)"
+            denom: "{card.cases.length}"
+            label: "total score"
+      - widget: case-table
+        source: card
+  - key: trend
+    label: "Trend"
+    select: {domain: true, run: false, case: false}
+    widgets:
+      - widget: heading
+        value: "$domain"
+      - widget: caption
+        text: "Total score across this domain's runs — updates as the endpoint reports new runs."
+      - widget: trend
+        source: "eval-scoring.scoreTrend(dataset, domain)"
+        caption: "score over runs"

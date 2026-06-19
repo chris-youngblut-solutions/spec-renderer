@@ -2,7 +2,7 @@
 /* spec-renderer MCP server — MCP Apps (SEP-1865) integration.
  *
  * Exposes the spec-renderer engine to an MCP host: the baked single-file
- * renderers (config-forge, eval-dashboard) and on-demand render_form /
+ * renderer (eval-dashboard) and on-demand render_form /
  * render_view tools are surfaced as `ui://` resources with mimeType
  * `text/html;profile=mcp-app`, so an LLM can render a form or dashboard live
  * inside Claude/ChatGPT from a spec.
@@ -67,7 +67,15 @@ export function createServer() {
   const TOOLS = [
     {
       name: "render_form",
-      description: "Compile a FORM spec (JSON-Schema subset + x-forge extensions) into a self-contained UI; returns a ui:// resource the host renders. The submitted values come back via the host's ui/message channel.",
+      // SUBMIT-BACK CONTRACT (SEP-1865): the rendered form has a host-only "Submit to
+      // agent" button. On click it sends a View->Host `ui/message` whose `params` carry
+      // `structuredContent` = the PUBLIC answers map ({KEY: stringValue}, secrets
+      // excluded) and `content[]` = the same map as variables.json text, tagged
+      // `_meta["io.modelcontextprotocol/ui"].kind = "form-submit"`. The host correlates
+      // that message to THIS tools/call via the iframe it instantiated from the returned
+      // `_meta.ui.resourceUri` — the View carries no tool-call id. Download buttons still
+      // emit `ui/message` text (download-emit), distinct from this deliberate submit.
+      description: "Compile a FORM spec (JSON-Schema subset + x-forge extensions) into a self-contained UI; returns a ui:// resource the host renders. The form's Submit button returns the assembled answers to the host as a ui/message with structuredContent (the public answers map); the host attributes it to this call via the returned resourceUri.",
       inputSchema: { type: "object", required: ["spec"], properties: { spec: { type: "string", description: "form spec text (YAML / JSON / markdown-with-frontmatter)" }, data: { type: "string", description: "optional JSON data" } } },
       _meta: uiMeta(),
     },

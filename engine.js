@@ -11,9 +11,10 @@
  *   1. YAML-subset parser   (parseYaml / parseFrontmatter)
  *   2. Spec envelope        (parseSpecText / parseEnvelope / validateEnvelope)
  *   3. Shell                ($ / el / esc / fmt / theme / storage / loaders)
- *   4. FORM renderer        (Phase 1 — stub)
- *   5. VIEW renderer        (Phase 2 — stub)
- *   6. Adapter registry     (Phase 2 — stub)
+ *   4. FORM renderer        (text/number/checkbox/select/textarea/array fields,
+ *                            validation, conditional visibility, exports)
+ *   5. VIEW renderer        (widgets, bindings, adapters)
+ *   6. Adapter registry     (eval-scoring)
  *   7. Boot + exports
  * ===================================================================== */
 "use strict";
@@ -393,7 +394,31 @@ function parseSpecText(text) {
   return { data: parseYaml(t), body: "", format: "yaml" };
 }
 
-/* normalize a parsed spec object into { kind, meta, spec } */
+/* Normalize a view's declared live-data source into a safe, FIXED shape, or null.
+ * DECLARATIVE ONLY: exactly four recognized keys are read — url, mode, intervalMs,
+ * auth. No credential / header / token key is EVER read: a secret embedded in the
+ * artifact would BE the secret (whoever holds the file holds it), so auth can only
+ * be the user's own session (credentials:'include') or network membership. Returns
+ * null — meaning fully offline, zero network, exactly as today — unless a usable
+ * url is present: an absolute http(s) URL, or a root-relative same-origin path. */
+function normalizeDataSource(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const url = typeof raw.url === "string" ? raw.url.trim() : "";
+  // accept ONLY a clean absolute http(s) origin (scheme://host[:port], host =
+  // letters/digits/dots/hyphens) followed by an optional path, OR a root-relative
+  // same-origin path. This rejects other schemes, relative paths, and any origin
+  // carrying characters that could later break out of the compiled CSP meta
+  // attribute (", ;, space, <, >, @ userinfo, backslashes).
+  if (!(/^https?:\/\/[a-zA-Z0-9.-]+(?::[0-9]+)?([/?#]|$)/i.test(url) || url[0] === "/")) return null;
+  const mode = raw.mode === "sse" ? "sse" : "poll";
+  let intervalMs = Number(raw.intervalMs);
+  if (!isFinite(intervalMs) || intervalMs <= 0) intervalMs = 15000;
+  intervalMs = Math.max(1000, Math.min(intervalMs, 3600000)); // clamp 1s..1h
+  const auth = raw.auth === "session" ? "session" : "none";
+  return { url, mode, intervalMs, auth };
+}
+
+/* normalize a parsed spec object into { kind, meta, spec, dataSource } */
 function parseEnvelope(input) {
   const obj = typeof input === "string" ? parseSpecText(input).data : input;
   if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
@@ -402,14 +427,17 @@ function parseEnvelope(input) {
   let kind = obj.kind || obj["x-forge-kind"];
   if (!kind) {
     if (obj.type === "object" && obj.properties) kind = "form";
-    else if (obj.views || obj.widgets || obj.dataSource) kind = "view";
+    else if (obj.views || obj.widgets || obj.dataSource || obj["x-forge-datasource"]) kind = "view";
   }
   const meta = {
     name: obj.name || obj["x-forge-name"] || null,
     title: obj.title || obj.name || obj["x-forge-name"] || "",
     version: obj.version || obj["x-forge-version"] || null,
   };
-  return { kind: kind || null, meta, spec: obj };
+  // x-forge-datasource is the canonical key (x-forge-* extension convention);
+  // a bare `dataSource` is accepted as an alias (it was already a kind-inference key).
+  const dataSource = normalizeDataSource(obj["x-forge-datasource"] || obj.dataSource);
+  return { kind: kind || null, meta, spec: obj, dataSource };
 }
 
 function validateEnvelope(env) {
@@ -445,13 +473,22 @@ const el = (tag, cls, html) => {
 // value can never break out of an attribute or inject markup.
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = (n) => (Math.round(n * 100) / 100).toString();
+// set an attribute on a createElement-built element. Guarded: a no-op when the
+// host has no setAttribute (the node:vm DOM shims used by tests) so the renderer
+// stays testable without a full DOM; a real op in the browser. setAttribute
+// value-encodes, so no esc() here — ids that ALSO travel through innerHTML
+// (for/aria-describedby targets) are esc()-d at those interpolation sites.
+const attr = (e, k, v) => { if (e && typeof e.setAttribute === "function") e.setAttribute(k, v); };
+// a DOM id from an author-controlled key: prefix-namespaced + index-disambiguated
+// so duplicate/re-rendered keys never collide; sanitized to id-safe chars.
+function a11yId(prefix, key, n) { return prefix + "-" + String(key).replace(/[^A-Za-z0-9_-]/g, "_") + "-" + n; }
 
 const THEME_KEY = "spec-renderer.theme.v1";
 
 function applyTheme(t) {
   document.documentElement.dataset.cabin = t;
   const b = $("#themeBtn");
-  if (b) b.textContent = t === "day" ? "night" : "day";
+  if (b) { b.textContent = t === "day" ? "night" : "day"; attr(b, "aria-label", "switch to " + (t === "day" ? "night" : "day") + " theme"); }
 }
 function toggleTheme() {
   const t = document.documentElement.dataset.cabin === "day" ? "night" : "day";
@@ -474,20 +511,114 @@ const FORM_FORMAT_VALID = {
 };
 
 const FORM_STATUSES = ["known", "default", "fill", "scoped-out"];
+// does a regex group BODY carry catastrophic-backtracking potential under an outer
+// repetition? true if it contains an unbounded quantifier (* + or open-ended {n,})
+// applied to an atom, OR an unescaped top-level alternation `|` (overlapping branches
+// like (a|a)+ also blow up exponentially). char classes + escapes are skipped so a
+// literal `|`/`+` inside `[...]` or after `\` does not count.
+function formCatastrophicBody(s) {
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "\\") { i++; continue; }                 // escaped char — skip next
+    if (c === "[") {                                    // char class — skip to ']'
+      i++;
+      while (i < s.length && s[i] !== "]") { if (s[i] === "\\") i++; i++; }
+      const r = s.slice(i + 1);
+      if (/^[*+]/.test(r) || /^\{\d*,\}/.test(r)) return true; // [..]+ / [..]{n,}
+      continue;
+    }
+    if (c === "*" || c === "+" || c === "|") return true;
+    if (c === "{" && /^\{\d*,\}/.test(s.slice(i))) return true; // open-ended {n,}
+  }
+  return false;
+}
+// conservative ReDoS-shape guard: reject a GROUP quantified by an unbounded
+// quantifier whose body could backtrack catastrophically — the classic shapes
+// (a+)+ / (a*)* / ([a-z]+)* and overlapping alternations (a|a)+. The 4096-char input
+// cap (PATTERN_MAX_INPUT) only bounds a LINEAR scan; exponential backtracking blows up
+// at tiny inputs, so it must be rejected structurally. Over-rejection is safe: a
+// rejected pattern degrades to no-pattern (the field just isn't regex-checked) — so a
+// safe disjoint alternation like (cat|dog)+ is conservatively rejected too.
+function formPatternRisky(src) {
+  const stack = [];
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === "\\") { i++; continue; }
+    if (c === "[") { i++; while (i < src.length && src[i] !== "]") { if (src[i] === "\\") i++; i++; } continue; }
+    if (c === "(") { stack.push(i); continue; }
+    if (c === ")") {
+      const open = stack.pop();
+      if (open == null) continue;
+      const rest = src.slice(i + 1);
+      if (!(/^[*+]/.test(rest) || /^\{\d*,\}/.test(rest))) continue; // group not unbounded-quantified
+      if (formCatastrophicBody(src.slice(open + 1, i))) return true;
+    }
+  }
+  return false;
+}
+// spec-authored `pattern` is compiled ONCE here (not per-keystroke), inside a
+// try/catch: an invalid pattern from a dropped/untrusted spec degrades to "no
+// pattern" rather than throwing. A catastrophic-backtracking SHAPE is rejected up
+// front (formPatternRisky) so an untrusted spec can't freeze the tab on a keystroke.
+function formCompilePattern(src) {
+  if (typeof src !== "string" || src === "") return null;
+  if (formPatternRisky(src)) return null;
+  try { return new RegExp(src); } catch (e) { return null; }
+}
+// a finite numeric bound (minimum/maximum); non-finite => "no bound".
+function formNumBound(v) { return typeof v === "number" && Number.isFinite(v) ? v : null; }
+function formIntBound(v) { return Number.isInteger(v) && v >= 0 ? v : null; } // length bounds: non-negative ints
+/* normalize x-forge-when into a flat {key: "value"} equality map, or null.
+ * DECLARATIVE EQUALITY ONLY — reject arrays, nested objects, or non-objects
+ * (the field stays always-active). Own-keys only; prototype-pollution sentinels
+ * skipped. Values are String()-coerced now so the runtime compare is a plain ===. */
+function formNormWhen(raw) {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out = Object.create(null);
+  let n = 0;
+  for (const k of Object.keys(raw)) {
+    if (isDangerousKey(k)) continue;
+    const v = raw[k];
+    if (v == null || typeof v === "object") return null; // not a flat scalar map => reject all
+    out[k] = String(v);
+    n++;
+  }
+  return n ? out : null;
+}
 function formNormField(key, p, required) {
   // whitelist status to the documented enum — an unknown value would otherwise
   // flow verbatim into a `b-<status>` class name (and is meaningless anyway).
   const status = FORM_STATUSES.indexOf(p.status) >= 0 ? p.status : (required.has(key) ? "fill" : "known");
+  const isArray = p.type === "array";
+  // array item shape: enum-items => checkbox group, else => one-per-line textarea.
+  const items = isArray && p.items && typeof p.items === "object" ? p.items : null;
+  const itemEnum = items && Array.isArray(items.enum) ? items.enum : null;
+  const hasArrDef = "default" in p && Array.isArray(p.default);
+  // multi-line string: opt in via `format: textarea` or `x-forge-multiline: true`;
+  // string fields only (never boolean/enum/array).
+  const multiline = (p.format === "textarea" || p["x-forge-multiline"] === true) && p.type !== "boolean" && !p.enum && !isArray;
   return {
     key,
     jsType: p.type, format: p.format || null, enum: p.enum || null,
+    isArray,
+    itemEnum,                                   // [..] when checkbox group, else null
+    minItems: typeof p.minItems === "number" ? p.minItems : null,
+    maxItems: typeof p.maxItems === "number" ? p.maxItems : null,
+    multiline,
     status,
     scoped: status === "scoped-out",
     secret: !!p.secret,
     required: required.has(key),
-    def: "default" in p && p.default != null ? p.default : "", // match config-forge curVal (default ?? "")
+    // arrays default to [] (or an explicit array default); scalars unchanged.
+    def: isArray ? (hasArrDef ? p.default.slice() : []) : ("default" in p && p.default != null ? p.default : ""), // match config-forge curVal (default ?? "")
     title: p.title != null ? p.title : "",
     desc: p.description != null ? p.description : "",
+    // JSON-Schema validation subset (number/integer bounds, string length, regex)
+    min: formNumBound(p.minimum), max: formNumBound(p.maximum),
+    minLen: formIntBound(p.minLength), maxLen: formIntBound(p.maxLength),
+    pattern: typeof p.pattern === "string" ? p.pattern : null,
+    patternRe: formCompilePattern(p.pattern),
+    when: formNormWhen(p["x-forge-when"]), // {ctrlKey: "value"} | null (always-active)
   };
 }
 
@@ -516,34 +647,92 @@ function formGrouped(spec) {
 function formFields(spec) { return formGrouped(spec).reduce((a, g) => a.concat(g.fields), []); }
 function formCurVal(field, answers) { return field.key in answers ? answers[field.key] : field.def; }
 
+/* {key: currentValue} for every field — current = answer if touched else default.
+ * The active-ness check reads the CONTROLLING field's current value from here, so
+ * a field gated on a controller's default works before the controller is touched. */
+function formValues(spec, answers) {
+  const vals = Object.create(null);
+  for (const f of formFields(spec)) vals[f.key] = formCurVal(f, answers);
+  return vals;
+}
+/* a field is ACTIVE unless its x-forge-when map says otherwise. AND of string
+ * equalities: every entry must match. No expression, no operator — `===` only. */
+function formActive(field, vals) {
+  const w = field.when;
+  if (!w) return true;
+  for (const k in w) { if (String(vals[k] == null ? "" : vals[k]) !== w[k]) return false; }
+  return true;
+}
+
+// ReDoS cap: a spec-authored `pattern` is never run over an input longer than
+// this. A real config value is far shorter; an absurdly long paste skips the
+// regex (treated as pass) rather than handing an untrusted pattern unbounded input.
+const PATTERN_MAX_INPUT = 4096;
+function formNumBoundError(field, n) {
+  if (field.min != null && n < field.min) return "must be >= " + field.min;
+  if (field.max != null && n > field.max) return "must be <= " + field.max;
+  return null;
+}
 function formFieldError(field, v) {
+  if (field.isArray) {
+    const arr = Array.isArray(v) ? v : [];
+    if (!arr.length) return field.required ? "required" : null;
+    if (field.itemEnum) { const bad = arr.find((x) => !field.itemEnum.includes(x)); if (bad != null) return "every item must be one of: " + field.itemEnum.join(", "); }
+    if (field.minItems != null && arr.length < field.minItems) return "select at least " + field.minItems;
+    if (field.maxItems != null && arr.length > field.maxItems) return "select at most " + field.maxItems;
+    return null;
+  }
   if (v === "" || v == null) return field.required ? "required" : null;
   if (field.enum) { if (!field.enum.includes(v)) return "must be one of: " + field.enum.join(", "); return null; }
   if (field.jsType === "boolean") { if (!["true", "false"].includes(String(v))) return "yes/no"; return null; }
-  if (field.jsType === "integer") { if (!/^-?\d+$/.test(v)) return "must be an integer"; return null; }
+  if (field.jsType === "integer") {
+    if (!/^-?\d+$/.test(v)) return "must be an integer"; // integer stays integer-only (rejects floats)
+    return formNumBoundError(field, parseInt(v, 10));
+  }
+  if (field.jsType === "number") {
+    const n = Number(v); // floats welcome; reject blanks-as-0, non-numeric, ±Infinity, NaN
+    if (!/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(String(v).trim()) || !Number.isFinite(n)) return "must be a number";
+    return formNumBoundError(field, n);
+  }
   if (field.format && FORM_FORMAT_VALID[field.format]) {
     const [rx, desc] = FORM_FORMAT_VALID[field.format];
     if (!rx.test(v)) return "must be " + desc;
     if (field.format === "ipv4" && v.split(".").some((o) => +o > 255)) return "octets must be 0-255";
   }
+  // string-shaped checks (type: string or untyped): length then pattern.
+  const s = String(v);
+  if (field.minLen != null && s.length < field.minLen) return "too short (min " + field.minLen + ")";
+  if (field.maxLen != null && s.length > field.maxLen) return "too long (max " + field.maxLen + ")";
+  if (field.patternRe && s.length <= PATTERN_MAX_INPUT && !field.patternRe.test(s)) return "must match pattern";
   return null;
 }
 
 function formBuckets(spec, answers) {
   const pub = [], sec = [];
+  const vals = formValues(spec, answers);
   for (const f of formFields(spec)) {
-    if (f.scoped) continue; // allFields excludes scoped-out
+    if (f.scoped) continue;             // allFields excludes scoped-out
+    if (!formActive(f, vals)) continue; // hidden (x-forge-when) => omitted from exports
     const v = formCurVal(f, answers);
     (f.secret ? sec : pub).push([f.key, v]);
   }
   return { pub, sec };
 }
 function formEnvQuote(v) {
-  if (v === "" || /[\s#'"$]/.test(v)) return '"' + String(v).replace(/"/g, '\\"') + '"';
+  // double-quote on whitespace (incl. newline), comment, quote, or $; empty too.
+  // inside the quotes use dotenv double-quote escaping so a multi-line value stays
+  // on ONE physical line — a raw newline would split the value across lines and a
+  // line-based .env consumer would read the tail as bogus KEY= entries. \\ first.
+  if (v === "" || /[\s#'"$]/.test(v)) {
+    return '"' + String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t") + '"';
+  }
   return v;
 }
 function formEnvText(items, banner) {
-  return banner + items.map(([k, v]) => k + "=" + formEnvQuote(v)).join("\n") + "\n";
+  // formScalar (defined below, hoisted) joins array values to a stable comma scalar;
+  // non-array values pass through unchanged, so scalar output is byte-identical.
+  return banner + items.map(([k, v]) => k + "=" + formEnvQuote(formScalar(v))).join("\n") + "\n";
 }
 function formBanner(spec, which) {
   if (which === "secret") return spec["x-forge-secret-banner"] != null ? spec["x-forge-secret-banner"] : "# secrets — gitignore this file.\n\n";
@@ -557,8 +746,96 @@ function formExportJson(spec, answers) {
   // Object.fromEntries — matches config-forge exactly (incl. for prototype-named keys)
   return JSON.stringify(Object.fromEntries(formBuckets(spec, answers).pub), null, 2) + "\n";
 }
+
+/* ---- extra public export formats (annotated env / YAML / TOML) ----
+ * All consume the SAME formBuckets().pub split, so secrets are excluded from every
+ * public format and stay routed to formExportSecrets. Every emitted value is a
+ * string; each format quotes/escapes per its own grammar so a value can't break out. */
+
+// the documented x-forge-outputs vocabulary. The DEFAULT (no x-forge-outputs, or
+// only env/json/secrets) keeps today's button set + bytes exactly. `secrets` is
+// implicit (driven by formHasSecrets) but accepted in the vocabulary for clarity.
+const FORM_OUTPUTS = ["env", "json", "secrets", "yaml", "toml", "env-annotated"];
+function formOutputs(spec) {
+  const raw = spec["x-forge-outputs"];
+  const set = new Set(Array.isArray(raw) ? raw.filter((o) => FORM_OUTPUTS.indexOf(o) >= 0) : []);
+  set.add("env"); set.add("json"); // env+json are always offered (today's baseline)
+  return set;
+}
+
+// coerce a current value to the string the text export grammars expect. Today every
+// answer is already a string; arrays comma-join, objects JSON-encode, null => "".
+// formExportJson keeps emitting the raw value — only the text formats funnel here.
+function formScalar(v) {
+  if (v == null) return "";
+  if (Array.isArray(v)) return v.map((x) => formScalar(x)).join(",");
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+// a comment is a single physical line: collapse newlines so a multi-line
+// description (block scalar) can never inject a bare (non-`#`) env line.
+function formEnvComment(s) { return String(s).replace(/[\r\n]+/g, " "); }
+/* annotated env: every active public field, with its description as a leading `# `
+ * comment line and each x-forge-group title as a `# == Title ==` section header.
+ * KEY=value bytes are produced by the SAME formEnvQuote/formScalar used by
+ * variables.env, so the variable lines are byte-identical — only comments differ. */
+function formExportEnvAnnotated(spec, answers) {
+  const vals = formValues(spec, answers);
+  let out = formBanner(spec, "env");
+  for (const { group, fields } of formGrouped(spec)) {
+    const pub = fields.filter((f) => !f.scoped && !f.secret && formActive(f, vals));
+    if (!pub.length) continue;
+    const title = group && group.title ? String(group.title) : "";
+    if (title) out += "# == " + formEnvComment(title) + " ==\n";
+    for (const f of pub) {
+      if (f.desc) out += "# " + formEnvComment(f.desc) + "\n";
+      out += f.key + "=" + formEnvQuote(formScalar(formCurVal(f, answers))) + "\n";
+    }
+    out += "\n";
+  }
+  return out.replace(/\n+$/, "\n"); // single trailing newline, matching formEnvText
+}
+
+/* YAML: flat `key: value`. Values are strings; quote any that parseYaml would
+ * coerce (true/false/null/number/empty) or that carry YAML-significant chars, so
+ * parseYaml(formExportYaml(...)) === the public {key:value} string map. */
+function formYamlNeedsQuote(s) {
+  if (s === "") return true;
+  if (/^(true|false|null|~|yes|no|on|off)$/i.test(s)) return true;     // would coerce to bool/null
+  if (/^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$/.test(s)) return true; // numeric
+  if (/[:#&*!|>'"%@`{}\[\],?\-\n\t]/.test(s)) return true;             // YAML-significant / unsafe
+  if (/^\s|\s$/.test(s)) return true;                                  // leading/trailing space
+  return false;
+}
+function formYamlQuote(s) {
+  return '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n").replace(/\t/g, "\\t").replace(/\r/g, "\\r") + '"';
+}
+function formYamlScalar(s) { return formYamlNeedsQuote(s) ? formYamlQuote(s) : s; }
+function formYamlKey(k) { return /^[A-Za-z_][\w.-]*$/.test(k) ? k : formYamlQuote(k); }
+function formExportYaml(spec, answers) {
+  let out = formBanner(spec, "env");
+  for (const [k, v] of formBuckets(spec, answers).pub) out += formYamlKey(k) + ": " + formYamlScalar(formScalar(v)) + "\n";
+  return out;
+}
+
+/* TOML: flat `key = "value"`. Every value is a basic (double-quoted) string —
+ * uniform + always valid, matching the form model's string semantics. */
+function formTomlString(s) {
+  return '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n").replace(/\t/g, "\\t").replace(/\r/g, "\\r") + '"';
+}
+function formTomlKey(k) { return /^[A-Za-z0-9_-]+$/.test(k) ? k : formTomlString(k); }
+function formExportToml(spec, answers) {
+  let out = formBanner(spec, "env");
+  for (const [k, v] of formBuckets(spec, answers).pub) out += formTomlKey(k) + " = " + formTomlString(formScalar(v)) + "\n";
+  return out;
+}
+
 function formInvalidCount(spec, answers) {
-  return formFields(spec).filter((f) => !f.scoped && formFieldError(f, formCurVal(f, answers))).length;
+  const vals = formValues(spec, answers);
+  return formFields(spec).filter((f) => !f.scoped && formActive(f, vals) && formFieldError(f, formCurVal(f, answers))).length;
 }
 function formHasSecrets(spec) { return formFields(spec).some((f) => !f.scoped && f.secret); }
 
@@ -566,6 +843,26 @@ function formHasSecrets(spec) { return formFields(spec).some((f) => !f.scoped &&
 function formStateKey(spec) { return "sr.form." + (spec["x-forge-name"] || spec.name || "x") + ".v1"; }
 function formPersist(spec, answers) { try { localStorage.setItem(formStateKey(spec), JSON.stringify(answers)); } catch (e) {} }
 function formRestore(spec) { try { const r = localStorage.getItem(formStateKey(spec)); return r ? JSON.parse(r) : {}; } catch (e) { return {}; } }
+/* embedded --data for a form: a flat {key: value} map (string values; arrays for
+ * array fields). Mirrors loadViewData — reads #embedded-data, own-keys only, drops
+ * prototype-polluting keys. Values flow into input.value/.checked, never innerHTML. */
+function formLoadData() {
+  const out = Object.create(null);
+  try {
+    const tag = $("#embedded-data");
+    const raw = tag ? tag.textContent.trim() : "";
+    if (!raw) return out;
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return out; // a view bundle / array is not form prefill
+    for (const k of Object.keys(obj)) { if (!isDangerousKey(k) && hasOwn(obj, k)) out[k] = obj[k]; }
+  } catch (e) {}
+  return out;
+}
+function formHasData() { for (const _ in formLoadData()) return true; return false; }
+/* precedence: saved localStorage > embedded --data > spec default. embedded data is
+ * the base; restored edits override key-by-key; any key absent from `answers` falls
+ * through to field.def inside formCurVal. */
+function formSeedAnswers(spec) { return Object.assign(Object.create(null), formLoadData(), formRestore(spec)); }
 function download(name, text) {
   const b = new Blob([text], { type: "text/plain" });
   const a = document.createElement("a");
@@ -576,7 +873,7 @@ function download(name, text) {
 
 function mountForm(env) {
   const spec = env.spec;
-  const answers = formRestore(spec);
+  const answers = formSeedAnswers(spec); // localStorage > embedded --data > spec default
   const sub = $("#subtitle");
   if (sub) sub.textContent = (env.meta.title || env.meta.name || "") + (env.meta.version ? " · v" + env.meta.version : "");
   const tabs = $("#tabs"); if (tabs) tabs.innerHTML = "";
@@ -584,46 +881,95 @@ function mountForm(env) {
   const loader = $("#loader"); if (loader) loader.style.display = "none";
   const view = $("#view"); view.innerHTML = "";
 
+  let gi = 0, ri = 0;
   for (const { group, fields } of formGrouped(spec)) {
     const card = el("div", "card");
+    attr(card, "role", "group");
+    const titleId = "grp-" + (gi++);
     const scopedN = fields.filter((f) => f.scoped).length;
-    card.appendChild(el("div", "group-title", esc(group.title) + (scopedN ? "  (" + scopedN + " scoped-out)" : "")));
+    const title = el("div", "group-title", esc(group.title) + (scopedN ? "  (" + scopedN + " scoped-out)" : ""));
+    attr(title, "id", titleId);
+    attr(card, "aria-labelledby", titleId);
+    card.appendChild(title);
     if (group.note) card.appendChild(el("p", "note", esc(group.note)));
-    for (const f of fields) card.appendChild(formRow(spec, f, answers));
+    for (const f of fields) card.appendChild(formRow(spec, f, answers, ri++));
     view.appendChild(card);
   }
   formMountBar(spec, answers);
   formUpdateBar(spec, answers);
 }
 
-function formRow(spec, field, answers) {
+function formRow(spec, field, answers, n) {
   const row = el("div", "field" + (field.scoped ? " scoped" : "") + (field.required ? " req" : ""));
   row.dataset.key = field.key;
-  const badge = field.scoped ? "" : '<span class="badge b-' + esc(field.status) + '">' + esc(field.status) + "</span>";
-  const meta = el("div", "meta",
-    '<span class="key">' + esc(field.key) + "</span>" + badge +
-    (field.title ? '<div class="label">' + esc(field.title) + "</div>" : "") +
-    (field.desc ? '<div class="help">' + esc(field.desc) + "</div>" : ""));
+  // stash the (validated, scalar-only) when-map so formApplyConditions can re-evaluate
+  // visibility on any change; set the initial hidden state for a conditioned field.
+  if (field.when) row.dataset.when = JSON.stringify(field.when);
+  if (field.when && !formActive(field, formValues(spec, answers))) row.style.display = "none";
+  // a11y ids: the control + its err node; the label `for` and aria-describedby
+  // target these. a11yId strips to id-safe chars; esc() guards the innerHTML sites.
+  const ctlId = a11yId("f", field.key, n || 0);
+  const errId = ctlId + "-err";
+  const helpId = field.desc ? ctlId + "-help" : null;
+  // arrays have no single control to point a label `for` at — they use a plain
+  // span + a role=group/aria-label on the widget wrap (set in formArrayWidget).
+  const forAttr = (!field.isArray && !field.scoped) ? ' for="' + esc(ctlId) + '"' : "";
+  const labelTag = forAttr ? "label" : "span";
+  const badge = field.scoped ? "" :
+    '<span class="badge b-' + esc(field.status) + '"><span class="sr-only">status </span>' + esc(field.status) + "</span>";
+  // when there's a title, IT is the label; otherwise the key span/label is.
+  const keyHtml = field.title
+    ? '<span class="key">' + esc(field.key) + "</span>"
+    : "<" + labelTag + ' class="key"' + forAttr + ">" + esc(field.key) + "</" + labelTag + ">";
+  const labelHtml = field.title
+    ? "<" + labelTag + ' class="label"' + forAttr + ">" + esc(field.title) + "</" + labelTag + ">"
+    : "";
+  const helpHtml = field.desc ? '<div class="help" id="' + esc(helpId) + '">' + esc(field.desc) + "</div>" : "";
+  const meta = el("div", "meta", keyHtml + badge + labelHtml + helpHtml);
   row.appendChild(meta);
 
   const wrap = el("div");
   if (!field.scoped) {
-    let input;
-    if (field.enum) {
-      input = el("select");
-      field.enum.forEach((o) => { const op = el("option"); op.value = o; op.textContent = o; input.appendChild(op); });
-    } else if (field.jsType === "boolean") {
-      input = el("select");
-      ["true", "false"].forEach((o) => { const op = el("option"); op.value = o; op.textContent = o; input.appendChild(op); });
+    // describedby = help (if any) then err — AT reads guidance then the error.
+    const describedBy = (helpId ? helpId + " " : "") + errId;
+    if (field.isArray) {
+      formArrayWidget(spec, field, answers, row, wrap);
+    } else if (field.jsType === "boolean" && !field.enum) {
+      // checkbox path — a checkbox is value-less (input.value is "on"); the logical
+      // value lives in .checked and the event is "change", so this branch is self-
+      // contained and never falls through to the value-bearing tail below.
+      const input = el("input");
+      input.type = "checkbox";
+      attr(input, "id", ctlId);
+      attr(input, "aria-describedby", describedBy);
+      if (field.required) attr(input, "aria-required", "true");
+      input.checked = String(formCurVal(field, answers)) === "true";
+      input.addEventListener("change", () => { answers[field.key] = input.checked ? "true" : "false"; formPersist(spec, answers); formCheck(row, field, input); formApplyConditions(spec, answers); formUpdateBar(spec, answers); });
+      wrap.appendChild(input);
+      const err = el("div", "err"); err.style.display = "none"; attr(err, "id", errId); wrap.appendChild(err);
+      formCheck(row, field, input);
     } else {
-      input = el("input");
-      input.type = field.secret ? "password" : "text";
+      let input;
+      if (field.enum) {
+        input = el("select");
+        field.enum.forEach((o) => { const op = el("option"); op.value = o; op.textContent = o; input.appendChild(op); });
+      } else if (field.multiline) {
+        // multi-line string: <textarea>, NOT <input type=text>; value is a string,
+        // newlines preserved; same input->persist->check->conditions->bar flow.
+        input = el("textarea");
+      } else {
+        input = el("input");
+        input.type = field.secret ? "password" : "text";
+      }
+      attr(input, "id", ctlId);
+      attr(input, "aria-describedby", describedBy);
+      if (field.required) attr(input, "aria-required", "true");
+      input.value = formCurVal(field, answers);
+      input.addEventListener("input", () => { answers[field.key] = input.value; formPersist(spec, answers); formCheck(row, field, input); formApplyConditions(spec, answers); formUpdateBar(spec, answers); });
+      wrap.appendChild(input);
+      const err = el("div", "err"); err.style.display = "none"; attr(err, "id", errId); wrap.appendChild(err);
+      formCheck(row, field, input);
     }
-    input.value = formCurVal(field, answers);
-    input.addEventListener("input", () => { answers[field.key] = input.value; formPersist(spec, answers); formCheck(row, field, input); formUpdateBar(spec, answers); });
-    wrap.appendChild(input);
-    const err = el("div", "err"); err.style.display = "none"; wrap.appendChild(err);
-    formCheck(row, field, input);
   } else {
     wrap.innerHTML = '<div class="label">excluded — scoped out</div>';
   }
@@ -631,33 +977,134 @@ function formRow(spec, field, answers) {
   return row;
 }
 
-function formCheck(row, field, input) {
-  const e = formFieldError(field, input.value);
+/* array field: a checkbox GROUP (enum items) or a one-value-per-line TEXTAREA
+ * (string items). The live answer is an immutable-update array in answers[key];
+ * the err <div> + formCheckArray mirror the scalar path. */
+function formArrayWidget(spec, field, answers, row, wrap) {
+  // a checkbox group / multi-value list is a labelled group for AT (no single
+  // control to carry a `for`); name it from the field's title or key.
+  attr(wrap, "role", "group");
+  attr(wrap, "aria-label", field.title || field.key);
+  const cur = formCurVal(field, answers);
+  const arr = Array.isArray(cur) ? cur.slice() : [];
+  if (field.itemEnum) {
+    const group = el("div", "checks");
+    field.itemEnum.forEach((opt) => {
+      const lab = el("label", "check");
+      const box = el("input");
+      box.type = "checkbox";
+      box.value = opt;                       // value set as a property, not innerHTML
+      box.checked = arr.indexOf(opt) >= 0;
+      box.addEventListener("change", () => {
+        const next = (Array.isArray(answers[field.key]) ? answers[field.key] : field.def).filter((x) => x !== opt); // immutable: drop then maybe re-add
+        if (box.checked) next.push(opt);
+        // re-project to itemEnum order so export bytes are stable regardless of click order
+        answers[field.key] = field.itemEnum.filter((o) => next.indexOf(o) >= 0);
+        formPersist(spec, answers); formCheckArray(row, field, answers); formApplyConditions(spec, answers); formUpdateBar(spec, answers);
+      });
+      lab.appendChild(box);
+      lab.appendChild(el("span", null, esc(opt)));
+      group.appendChild(lab);
+    });
+    wrap.appendChild(group);
+  } else {
+    const ta = el("textarea");
+    ta.value = arr.join("\n");
+    ta.addEventListener("input", () => {
+      // one value per line; blank lines dropped, surrounding whitespace trimmed.
+      answers[field.key] = ta.value.split("\n").map((s) => s.trim()).filter((s) => s !== "");
+      formPersist(spec, answers); formCheckArray(row, field, answers); formApplyConditions(spec, answers); formUpdateBar(spec, answers);
+    });
+    wrap.appendChild(ta);
+  }
+  const err = el("div", "err"); err.style.display = "none"; wrap.appendChild(err);
+  formCheckArray(row, field, answers);
+}
+
+function formCheckArray(row, field, answers) {
+  const e = formFieldError(field, formCurVal(field, answers));
   const errEl = row.querySelector(".err");
   if (e) { row.classList.add("invalid"); if (errEl) { errEl.textContent = "✗ " + e; errEl.style.display = "block"; } }
   else { row.classList.remove("invalid"); if (errEl) errEl.style.display = "none"; }
   return !e;
 }
 
+function formCheck(row, field, input) {
+  const v = input.type === "checkbox" ? (input.checked ? "true" : "false") : input.value;
+  const e = formFieldError(field, v);
+  const errEl = row.querySelector(".err");
+  if (e) { row.classList.add("invalid"); attr(input, "aria-invalid", "true"); if (errEl) { errEl.textContent = "✗ " + e; errEl.style.display = "block"; } }
+  else { row.classList.remove("invalid"); attr(input, "aria-invalid", "false"); if (errEl) errEl.style.display = "none"; }
+  return !e;
+}
+
+/* re-evaluate x-forge-when visibility for every row against the current answers.
+ * Called on any field change before formUpdateBar. Toggles row display only; the
+ * bar's recompute (formInvalidCount/formBuckets) independently excludes inactive
+ * fields, so a hidden invalid field never blocks export. No #view => guarded no-op. */
+function formApplyConditions(spec, answers) {
+  const view = $("#view");
+  if (!view) return;
+  const vals = formValues(spec, answers);
+  const byKey = Object.create(null);
+  for (const f of formFields(spec)) byKey[f.key] = f;
+  const rows = view.querySelectorAll ? view.querySelectorAll(".field") : [];
+  Array.prototype.forEach.call(rows, (row) => {
+    const key = row.dataset && row.dataset.key;
+    const f = key != null && hasOwn(byKey, key) ? byKey[key] : null;
+    if (!f || !f.when) return; // unconditioned rows are never touched
+    row.style.display = formActive(f, vals) ? "" : "none";
+  });
+}
+
 function formMountBar(spec, answers) {
   const bar = $("#bar");
   if (!bar) return;
+  const outs = formOutputs(spec);
   bar.style.display = "flex";
-  bar.innerHTML = '<span class="count" id="count"></span>'
+  attr(bar, "role", "toolbar");
+  attr(bar, "aria-label", "exports");
+  // default button set + bytes are UNCHANGED — export extras are appended after
+  // #dlJson only when the spec opts in via x-forge-outputs; the reset button only
+  // when --data was embedded. #dlEnv/#dlSecret/#dlJson/#dlAll keep ids/order/handlers.
+  let extra = "";
+  if (outs.has("env-annotated")) extra += '<button class="ghost" id="dlEnvAnn">variables.annotated.env</button>';
+  if (outs.has("yaml")) extra += '<button class="ghost" id="dlYaml">variables.yaml</button>';
+  if (outs.has("toml")) extra += '<button class="ghost" id="dlToml">variables.toml</button>';
+  // the Submit button is host-only — it returns the result INTO the agent loop, which
+  // is meaningless standalone (file://). Gate on the live MCP bridge.
+  const submitBtn = MCP.bridge ? '<button id="formSubmit">Submit to agent</button>' : "";
+  bar.innerHTML = '<span class="count" id="count" aria-live="polite"></span>'
     + '<button id="dlEnv">variables.env</button>'
     + '<button id="dlSecret">variables-secrets.env</button>'
     + '<button class="ghost" id="dlJson">variables.json</button>'
-    + '<button id="dlAll">Download all</button>';
+    + extra
+    + '<button id="dlAll">Download all</button>'
+    + submitBtn
+    + (formHasData() ? '<button class="ghost" id="resetData">Reset to provided</button>' : "");
   $("#dlEnv").onclick = () => { const t = formExportEnv(spec, answers); download("variables.env", t); mcpEmitResult(t); };
   $("#dlSecret").onclick = () => download("variables-secrets.env", formExportSecrets(spec, answers, "secret"));
   $("#dlJson").onclick = () => { const t = formExportJson(spec, answers); download("variables.json", t); mcpEmitResult(t); };
+  if (outs.has("env-annotated")) $("#dlEnvAnn").onclick = () => { const t = formExportEnvAnnotated(spec, answers); download("variables.annotated.env", t); mcpEmitResult(t); };
+  if (outs.has("yaml")) $("#dlYaml").onclick = () => { const t = formExportYaml(spec, answers); download("variables.yaml", t); mcpEmitResult(t); };
+  if (outs.has("toml")) $("#dlToml").onclick = () => { const t = formExportToml(spec, answers); download("variables.toml", t); mcpEmitResult(t); };
   $("#dlAll").onclick = () => {
     const env = formExportEnv(spec, answers);
     download("variables.env", env);
     if (formBuckets(spec, answers).sec.length) download("variables-secrets.env", formExportSecrets(spec, answers, "all"));
     download("variables.json", formExportJson(spec, answers));
+    if (outs.has("env-annotated")) download("variables.annotated.env", formExportEnvAnnotated(spec, answers));
+    if (outs.has("yaml")) download("variables.yaml", formExportYaml(spec, answers));
+    if (outs.has("toml")) download("variables.toml", formExportToml(spec, answers));
     mcpEmitResult(env);
   };
+  const sb = $("#formSubmit");
+  // public answers map (secrets excluded) + the human-readable mirror; share the exact
+  // export bytes so structured + text never disagree.
+  if (sb) sb.onclick = () => mcpSubmit(Object.fromEntries(formBuckets(spec, answers).pub), formExportJson(spec, answers));
+  const rd = $("#resetData");
+  // drop in-progress edits, fall back to embedded --data (then spec defaults), re-render.
+  if (rd) rd.onclick = () => { try { localStorage.removeItem(formStateKey(spec)); } catch (e) {} mountForm({ spec, meta: { title: spec.title || (spec["x-forge-name"] || spec.name || ""), name: spec["x-forge-name"] || spec.name || "", version: spec.version || spec["x-forge-version"] || null } }); };
 }
 
 function formUpdateBar(spec, answers) {
@@ -665,7 +1112,7 @@ function formUpdateBar(spec, answers) {
   const fields = formFields(spec).filter((f) => !f.scoped);
   const bad = formInvalidCount(spec, answers);
   if (count) count.textContent = fields.length + " fields · " + bad + " invalid" + (bad ? "" : "  ✓ ready");
-  ["#dlEnv", "#dlJson", "#dlAll"].forEach((s) => { const b = $(s); if (b) b.disabled = bad > 0; });
+  ["#dlEnv", "#dlJson", "#dlAll", "#dlEnvAnn", "#dlYaml", "#dlToml"].forEach((s) => { const b = $(s); if (b) b.disabled = bad > 0; });
   const ds = $("#dlSecret");
   if (ds) { ds.style.display = formHasSecrets(spec) ? "" : "none"; ds.disabled = bad > 0; }
 }
@@ -746,6 +1193,28 @@ function svgMetricBars(rollups) {
   }).join("");
   return '<svg viewBox="0 0 ' + W + " " + h + '" width="100%" height="' + h + '" role="img" aria-label="per-metric mean score">' + bars + "</svg>";
 }
+// hand-rolled score-over-runs line chart (no deps; same CSP-clean shape as
+// svgMetricBars). series = [{run_id, score, passed, n}] chronological. y-axis is
+// 0..max(series scores, 1). All interpolated data goes through esc(); coords are
+// engine-computed numbers, not user strings.
+function svgTrend(series) {
+  const W = 520, H = 150, padL = 34, padR = 10, padT = 12, padB = 24;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const n = series.length;
+  const max = Math.max(1, ...series.map((p) => p.score)); // 0..max, floor of 1 avoids /0
+  const x = (i) => n <= 1 ? padL + innerW / 2 : padL + (i / (n - 1)) * innerW;
+  const y = (s) => padT + innerH - (s / max) * innerH;
+  const axis = '<line x1="' + padL + '" y1="' + (padT + innerH) + '" x2="' + (W - padR) + '" y2="' + (padT + innerH) + '" stroke="var(--cabin-rule-2)"/>'
+    + '<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT + innerH) + '" stroke="var(--cabin-rule-2)"/>'
+    + '<text x="' + (padL - 6) + '" y="' + (padT + 4) + '" text-anchor="end" font-size="10" font-family="var(--font-mono)" fill="var(--cabin-ink-3)">' + esc(fmt(max)) + "</text>"
+    + '<text x="' + (padL - 6) + '" y="' + (padT + innerH) + '" text-anchor="end" font-size="10" font-family="var(--font-mono)" fill="var(--cabin-ink-3)">0</text>';
+  const pts = series.map((p, i) => x(i) + "," + y(p.score)).join(" ");
+  const line = n >= 2 ? '<polyline points="' + pts + '" fill="none" stroke="var(--cabin-accent)" stroke-width="2"/>' : "";
+  const dots = series.map((p, i) =>
+    '<circle cx="' + x(i) + '" cy="' + y(p.score) + '" r="3.5" fill="' + (p.passed === p.n && p.n > 0 ? "var(--cabin-ok)" : "var(--cabin-accent)") + '"><title>' + esc(p.run_id) + " · score " + esc(fmt(p.score)) + " · " + esc(p.passed) + "/" + esc(p.n) + " passed</title></circle>"
+  ).join("");
+  return '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" height="' + H + '" role="img" aria-label="score over runs (trend)">' + axis + line + dots + "</svg>";
+}
 function passDot(passed) { return '<span class="dot ' + (passed ? "bg-ok" : "bg-bad") + '"></span>'; }
 function renderBlock(block) {
   if (block.type === "text") return el("div", "blk text", esc(block.text));
@@ -773,6 +1242,25 @@ function renderTurn(message) {
   if (typeof message.content === "string") t.appendChild(el("div", "blk text", esc(message.content)));
   else (message.content || []).forEach((b) => t.appendChild(renderBlock(b)));
   return t;
+}
+
+/* case-table filter + sort (engine-owned; the spec never authors any of this).
+ * filter: case-insensitive substring on case_id. sort: by case_id | score |
+ * turns, st.sortDir = +1 asc / -1 desc. Non-mutating — a fresh array out, so
+ * the source card.cases order is never disturbed. */
+function caseTableRows(cases, st) {
+  let rows = Array.isArray(cases) ? cases.slice() : [];
+  const q = String(st.filter || "").toLowerCase();
+  if (q) rows = rows.filter((c) => String(c.case_id == null ? "" : c.case_id).toLowerCase().indexOf(q) >= 0);
+  if (st.sortKey) {
+    const k = st.sortKey, dir = st.sortDir < 0 ? -1 : 1;
+    rows.sort((a, b) => {
+      const av = a[k], bv = b[k];
+      if (k === "case_id") return dir * String(av == null ? "" : av).localeCompare(String(bv == null ? "" : bv));
+      return dir * ((Number(av) || 0) - (Number(bv) || 0));
+    });
+  }
+  return rows;
 }
 
 /* ---- 5c. widget registry: each renders into `host` from (spec, ctx) ---- */
@@ -817,19 +1305,70 @@ const WIDGETS = {
     const card = rb(w.source, ctx);
     if (!card) { host.appendChild(el("p", "muted", "No run selected.")); return; }
     const tc = el("div", "card");
+
+    // per-render widget state (NOT persisted): substring filter on case_id +
+    // a sort key/dir. Engine-owned — the spec contributes no logic here.
+    const st = { filter: "", sortKey: null, sortDir: 1 };
+
+    // filter box — engine.css class only, no inline style
+    const ctrl = el("div", "table-controls");
+    const fi = el("input", "filter");
+    fi.type = "text"; fi.placeholder = "filter case_id…";
+    fi.addEventListener("input", () => { st.filter = fi.value; renderRows(); });
+    ctrl.appendChild(fi);
+    tc.appendChild(ctrl);
+
+    const SORTABLE = { case: "case_id", score: "score", turns: "turns" };
     const tbl = el("table");
-    tbl.innerHTML = "<thead><tr><th>case</th><th>score</th><th>stop</th><th class='num'>turns</th><th>tools</th><th></th></tr></thead>";
+    const head = el("thead");
+    const hr = el("tr");
+    // headers: case | score | stop | turns | tools | (link). case/score/turns are
+    // sortable (click toggles asc/desc); the data-sort attr is fixed engine text.
+    [["case", "case"], ["score", "score"], ["stop", null], ["turns", "turns", "num"], ["tools", null], ["", null]]
+      .forEach(([label, key, extra]) => {
+        const th = el("th", extra || null);
+        attr(th, "scope", "col");
+        if (key) {
+          th.className = (extra ? extra + " " : "") + "sortable";
+          th.dataset.sort = key;
+          th.onclick = () => {
+            const path = SORTABLE[key];
+            if (st.sortKey === path) st.sortDir = -st.sortDir; else { st.sortKey = path; st.sortDir = 1; }
+            renderHeads(); renderRows();
+          };
+        }
+        th.textContent = label;
+        hr.appendChild(th);
+      });
+    head.appendChild(hr); tbl.appendChild(head);
     const tb = el("tbody");
-    card.cases.forEach((c) => {
-      const tr = el("tr");
-      tr.innerHTML = "<td>" + passDot(c.passed) + esc(c.case_id) + (c.hard_gate ? ' <span class="chip">gate</span>' : "") + "</td>"
-        + '<td class="num">' + fmt(c.score) + '</td><td class="micro">' + esc(c.stop_reason) + "</td>"
-        + '<td class="num">' + esc(c.turns) + '</td><td class="micro">' + (c.tools_called ? c.tools_called.length : 0) + "</td>"
-        + '<td><span class="link" data-case="' + esc(c.case_id) + '">transcript →</span></td>';
-      tb.appendChild(tr);
-    });
     tbl.appendChild(tb); tc.appendChild(tbl); host.appendChild(tc);
-    tc.querySelectorAll(".link[data-case]").forEach((a) => { a.onclick = () => { VIEW.caseId = a.dataset.case; VIEW.view = "transcript"; viewMount(); }; });
+
+    function renderHeads() {
+      hr.children.forEach((th) => {
+        if (!th.dataset || !th.dataset.sort) return;
+        const path = SORTABLE[th.dataset.sort];
+        const arrow = st.sortKey === path ? (st.sortDir > 0 ? " ↑" : " ↓") : "";
+        th.textContent = th.dataset.sort + arrow;
+      });
+    }
+    function renderRows() {
+      tb.innerHTML = "";
+      caseTableRows(card.cases, st).forEach((c) => {
+        const tr = el("tr");
+        tr.innerHTML = "<td>" + passDot(c.passed) + esc(c.case_id) + (c.hard_gate ? ' <span class="chip">gate</span>' : "") + "</td>"
+          + '<td class="num">' + fmt(c.score) + '</td><td class="micro">' + esc(c.stop_reason) + "</td>"
+          + '<td class="num">' + esc(c.turns) + '</td><td class="micro">' + (c.tools_called ? c.tools_called.length : 0) + "</td>"
+          + '<td><span class="link" role="button" tabindex="0" data-case="' + esc(c.case_id) + '" aria-label="open transcript for ' + esc(c.case_id) + '">transcript →</span></td>';
+        tb.appendChild(tr);
+      });
+      tb.querySelectorAll(".link[data-case]").forEach((a) => {
+        const open = () => { VIEW.caseId = a.dataset.case; VIEW.view = "transcript"; viewMount(); };
+        a.onclick = open;
+        a.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { if (e.preventDefault) e.preventDefault(); open(); } });
+      });
+    }
+    renderRows();
   },
   "regression-diff"(w, ctx, host) {
     const before = rb(w.before, ctx), after = rb(w.after, ctx);
@@ -880,6 +1419,17 @@ const WIDGETS = {
     });
     host.appendChild(grid);
   },
+  // score-over-runs line chart. The series COMPUTATION is in eval-scoring.scoreTrend
+  // (anti-pattern #1) — the widget only resolves the binding and renders.
+  trend(w, ctx, host) {
+    const series = rb(w.source, ctx) || [];
+    const tc = el("div", "card");
+    tc.appendChild(el("div", "micro", esc(w.caption || "score over runs — oldest → newest")));
+    if (!series.length) { tc.appendChild(el("p", "muted", "No runs in this domain yet.")); host.appendChild(tc); return; }
+    tc.appendChild(el("div", null, svgTrend(series)));
+    tc.appendChild(el("div", "micro", esc(series.length) + (series.length === 1 ? " run" : " runs")));
+    host.appendChild(tc);
+  },
 };
 
 /* ---- 5c. view state + mount ---- */
@@ -913,10 +1463,34 @@ function viewContext() {
 
 function viewRenderTabs() {
   const nav = $("#tabs"); if (!nav) return; nav.innerHTML = "";
-  (VIEW.spec.views || []).forEach((v) => {
-    const b = el("div", "tab" + (VIEW.view === v.key ? " on" : ""), esc(v.label || v.key));
+  attr(nav, "role", "tablist");
+  const views = VIEW.spec.views || [];
+  const tabs = [];
+  views.forEach((v) => {
+    const on = VIEW.view === v.key;
+    const b = el("div", "tab" + (on ? " on" : ""), esc(v.label || v.key));
+    attr(b, "role", "tab");
+    attr(b, "aria-selected", on ? "true" : "false");
+    attr(b, "tabindex", on ? "0" : "-1"); // roving tabindex: only the active tab is in the tab order
     b.onclick = () => { VIEW.view = v.key; viewMount(); };
     nav.appendChild(b);
+    tabs.push(b);
+  });
+  // arrow / Home / End move focus + activation; Enter / Space activate the focused tab.
+  const activate = (i) => { const v = views[i]; if (!v) return; VIEW.view = v.key; viewMount(); const t = $("#tabs"); const nb = t && t.children && t.children[i]; if (nb && nb.focus) nb.focus(); };
+  tabs.forEach((b, i) => {
+    b.addEventListener("keydown", (e) => {
+      const k = e.key;
+      let to = -1;
+      if (k === "ArrowRight" || k === "ArrowDown") to = (i + 1) % views.length;
+      else if (k === "ArrowLeft" || k === "ArrowUp") to = (i - 1 + views.length) % views.length;
+      else if (k === "Home") to = 0;
+      else if (k === "End") to = views.length - 1;
+      else if (k === "Enter" || k === " " || k === "Spacebar") to = i;
+      else return;
+      if (e.preventDefault) e.preventDefault();
+      activate(to);
+    });
   });
 }
 function viewPicker(label, opts, value) {
@@ -1055,8 +1629,19 @@ function diffRows(before, after) {   // mirrors scoring.diff_report deltas
   return { rows, regressions, improvements };
 }
 
+// score-over-runs series for one domain, chronological (oldest-first). viewRunsFor
+// is newest-first, so reverse. Computation lives HERE (not the widget) — anti-pattern #1.
+function scoreTrend(dataset, domain) {
+  const runs = viewRunsFor(dataset, domain).slice().reverse();
+  return runs.map((runId) => {
+    const card = viewCardOf(dataset, domain, runId);
+    const cases = (card && card.cases) || [];
+    return { run_id: runId, score: totalScore({ cases }), passed: passedCount({ cases }), n: cases.length };
+  });
+}
+
 const ADAPTERS = {
-  "eval-scoring": { metricKey, byMetric, totalScore, passedCount, hardGateFailures, diffRows },
+  "eval-scoring": { metricKey, byMetric, totalScore, passedCount, hardGateFailures, diffRows, scoreTrend },
 };
 
 /* =====================================================================
@@ -1073,7 +1658,12 @@ const MCP = { bridge: null, env: null };
 function mcpConnect(env) {
   MCP.env = env;
   const w = typeof window !== "undefined" ? window : null;
-  if (!w || !w.parent || w.parent === w || typeof w.addEventListener !== "function") return null;
+  if (!w || !w.parent || w.parent === w || typeof w.addEventListener !== "function") {
+    // no MCP host (file:// / top-level): start opt-in live data. A no-op unless
+    // the view declared a dataSource — so the offline default is untouched.
+    startLiveData(env);
+    return null;
+  }
   const pending = {};
   let rpcId = 0;
   const send = (m) => w.parent.postMessage(m, "*");
@@ -1083,6 +1673,11 @@ function mcpConnect(env) {
   };
   MCP.bridge = bridge;
   w.addEventListener("message", (ev) => mcpOnMessage(ev && ev.data, pending));
+  // a form was mounted (pre-bridge) by boot() before mcpConnect ran — re-mount it now
+  // that MCP.bridge is live so the host-only Submit button appears. Same tick as the
+  // first mount (no user edits yet), and a full re-mount keeps the bar + row handlers
+  // closing over one consistent answers object.
+  if (env && env.kind === "form" && typeof document !== "undefined" && $("#bar")) mountForm(env);
   bridge.request("ui/initialize", { protocolVersion: "2026-01-26", capabilities: {} }).then((res) => {
     bridge.notify("ui/notifications/initialized", {});
     const theme = res && res.hostContext && res.hostContext.theme;
@@ -1105,6 +1700,81 @@ function mcpOnToolResult(params) {
 
 /* emit a form's assembled output to the host (no-op outside a host) */
 function mcpEmitResult(text) { if (MCP.bridge) MCP.bridge.notify("ui/message", { content: [{ type: "text", text: text }] }); }
+
+/* SEP-1865 submit-back: hand the form's assembled answers to the host as the
+ * structured tool result (a deliberate handoff, distinct from download-emit).
+ * `map` is the PUBLIC answers map (secrets excluded — same boundary as exports);
+ * `text` is the human-readable mirror. No-op outside a host. The host correlates
+ * this ui/message to the originating render_form call by the iframe's resourceUri;
+ * the View intentionally carries no tool-call id. */
+function mcpSubmit(map, text) {
+  if (!MCP.bridge) return;
+  MCP.bridge.notify("ui/message", {
+    content: [{ type: "text", text: text }],
+    structuredContent: map,
+    _meta: { "io.modelcontextprotocol/ui": { kind: "form-submit" } },
+  });
+}
+
+/* =====================================================================
+ * 6c. LIVE DATA (opt-in) — a *view* may declare x-forge-datasource to pull
+ *     live updates from a READ-ONLY internal endpoint. DEFAULT-ABSENT means
+ *     zero network: the offline, self-contained default is untouched. The
+ *     engine OWNS the fetch/poll/SSE + merge (the spec is declarative data,
+ *     no logic) and reuses the EXACT validate -> mergeBundle -> viewMount loop
+ *     the MCP host-push (mcpOnToolResult) already uses. The browser NEVER talks
+ *     to a database and NEVER issues SQL — the endpoint returns the bundle shape.
+ *     NEVER reads a credential from the spec: auth rides the user's session
+ *     (credentials:'include') or network membership (tailnet / Access). Gated to
+ *     the STANDALONE case — inside an MCP host the data still arrives via
+ *     mcpOnToolResult (the host may sandbox connect-src).
+ * ===================================================================== */
+const LIVE = { timer: null, source: null };
+
+/* validate a fetched payload + merge it into the live dataset, then re-render.
+ * The isBundle gate rejects junk before it can touch the view. Returns whether
+ * a merge happened (used by tests + the fetch chain). */
+function liveApply(obj) {
+  if (obj && isBundle(obj)) { mergeBundle(VIEW.dataset, obj); viewMount(); return true; }
+  return false;
+}
+
+/* one poll cycle: fetch -> ok+json -> liveApply. auth:session attaches the
+ * user's credentials; auth:none is an anonymous (network-gated) GET. Network /
+ * parse / non-bundle failures are swallowed (the last good view stays put). */
+function liveRefresh(cfg) {
+  if (typeof fetch !== "function") return Promise.resolve(false);
+  const opts = cfg.auth === "session" ? { credentials: "include" } : undefined;
+  return fetch(cfg.url, opts)
+    .then((r) => (r && r.ok ? r.json() : null))
+    .then((obj) => liveApply(obj))
+    .catch(() => false);
+}
+
+/* start the declared live source (no-op unless the view opted in). poll =
+ * immediate fetch + setInterval; sse = EventSource merging each event (falls
+ * back to poll when EventSource is unavailable). Returns the timer/source. */
+function startLiveData(env) {
+  const cfg = env && env.dataSource;
+  if (!cfg) return null;        // not opted in -> stay fully offline
+  if (MCP.bridge) return null;  // inside an MCP host -> host pushes data instead
+  if (cfg.mode === "sse" && typeof EventSource === "function") {
+    const es = new EventSource(cfg.url, cfg.auth === "session" ? { withCredentials: true } : undefined);
+    es.onmessage = (ev) => { try { liveApply(JSON.parse(ev && ev.data)); } catch (e) {} };
+    LIVE.source = es;
+    return es;
+  }
+  liveRefresh(cfg); // poll (also the EventSource-absent fallback): fetch once now, then on the interval
+  if (typeof setInterval === "function") LIVE.timer = setInterval(() => liveRefresh(cfg), cfg.intervalMs);
+  return LIVE.timer;
+}
+
+/* tear down any running poll/SSE (teardown + tests). */
+function stopLiveData() {
+  if (LIVE.timer != null && typeof clearInterval === "function") clearInterval(LIVE.timer);
+  if (LIVE.source && typeof LIVE.source.close === "function") LIVE.source.close();
+  LIVE.timer = null; LIVE.source = null;
+}
 
 /* =====================================================================
  * 7. BOOT + EXPORTS
@@ -1193,10 +1863,13 @@ if (typeof module !== "undefined" && module.exports) {
     parseYaml, parseFrontmatter, parseSpecText, parseEnvelope, validateEnvelope, esc,
     formFields, formBuckets, formCurVal, formFieldError, formEnvQuote,
     formExportEnv, formExportSecrets, formExportJson,
+    formExportEnvAnnotated, formExportYaml, formExportToml, formOutputs,
+    formActive, formValues, formSeedAnswers, formInvalidCount,
     ADAPTERS,
     emptyDataset, isBundle, isScorecard, mergeBundle, domainFromRunId,
     viewDomains, viewRunsFor, viewCardOf, viewTranscriptOf,
-    resolveBinding, lookup,
+    resolveBinding, lookup, caseTableRows,
+    normalizeDataSource, startLiveData, stopLiveData, liveApply, liveRefresh,
   };
 }
 if (typeof document !== "undefined") boot();
