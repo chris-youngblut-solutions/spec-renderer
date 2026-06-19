@@ -1,27 +1,11 @@
-/* spec-renderer engine styles.
-   Cabin day/night theme tokens — a small self-contained token set.
-   Fonts fall back to system stacks:
-   no @import, so the file is offline / CSP-clean / single-artifact.
-   Lifted verbatim from eval-dashboard so compiled views render identically. */
-:root, [data-cabin="day"] {
-  --cabin-paper:#EDE3CF; --cabin-paper-2:#E4D8BE; --cabin-paper-3:#D9C9A8; --cabin-paper-inset:#F4ECDA;
-  --cabin-ink:#2A1F18; --cabin-ink-2:#4A3828; --cabin-ink-3:#6B5340; --cabin-ink-4:#9A8770;
-  --cabin-rule:rgba(60,30,15,0.10); --cabin-rule-2:rgba(60,30,15,0.18); --cabin-rule-strong:rgba(60,30,15,0.28);
-  --cabin-accent:#B85A3E; --cabin-accent-deep:#8E4530; --cabin-accent-soft:rgba(184,90,62,0.14); --cabin-accent-wash:rgba(184,90,62,0.06);
-  --cabin-ok:#5F6B3D; --cabin-warn:#C28A3A; --cabin-danger:#A8523C; --cabin-info:#6B7F8F;
-}
-[data-cabin="night"] {
-  --cabin-paper:#14181B; --cabin-paper-2:#1A1F22; --cabin-paper-3:#21272B; --cabin-paper-inset:#1E2428;
-  --cabin-ink:#ECE3CF; --cabin-ink-2:#C9BFA8; --cabin-ink-3:#8E8470; --cabin-ink-4:#5C544A;
-  --cabin-rule:rgba(220,210,190,0.08); --cabin-rule-2:rgba(220,210,190,0.16); --cabin-rule-strong:rgba(220,210,190,0.28);
-  --cabin-accent:#D97757; --cabin-accent-deep:#B85A3E; --cabin-accent-soft:rgba(217,119,87,0.16); --cabin-accent-wash:rgba(217,119,87,0.06);
-  --cabin-ok:#8a9a5b; --cabin-warn:#d6a24f; --cabin-danger:#c8694f; --cabin-info:#8fa3b3;
-}
-:root {
-  --font-serif:'Iowan Old Style','Palatino Linotype',Georgia,serif;
-  --font-sans:-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;
-  --font-mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-}
+/* spec-renderer engine styles — the WIDGET layer.
+   These rules consume --cabin-* theme tokens but DEFINE none of them: the
+   token vocabulary (day/night palette + font stacks) is supplied by a swappable
+   THEME PACK (themes/<name>/theme.css), inlined ahead of this block by
+   compile-spec.mjs (default pack = Cabin; --theme selects another). Keeping the
+   widget layer token-only — never a literal color — is what makes the theme
+   interchangeable. No external imports, embedded font files, or remote
+   url() references here: offline / CSP-clean / single-artifact. */
 *{box-sizing:border-box}
 body{margin:0;background:var(--cabin-paper);color:var(--cabin-ink);
   font:15px/1.5 var(--font-sans);-webkit-font-smoothing:antialiased}

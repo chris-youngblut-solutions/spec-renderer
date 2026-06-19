@@ -20,17 +20,21 @@ renderer you drop your own spec into.
   inlined in the browser and, unchanged, under `node:vm` for tests (pure
   functions are exposed via `module.exports`; `boot()` runs only when a document
   is present).
-- **`engine.css`** — Cabin day/night theme tokens + widget styles. No
-  `@import`, no web fonts — offline / CSP-clean.
+- **`engine.css`** — the widget styles. They consume `--cabin-*` theme tokens but
+  define none of them: the token vocabulary (day/night palette + font stacks) comes
+  from a swappable **theme pack** (`themes/<name>/theme.css`), inlined ahead of the
+  widget CSS by the compiler. Default pack = Cabin; `--theme` selects another. No
+  `@import`, no web fonts — offline / CSP-clean. See `themes/THEMES.md`.
 - **`engine.html.tmpl`** — the skeleton, with splice points for CSS, JS, the
   embedded spec, and optional embedded data. The engine's logic is the single
   **attribute-less** `<script>`; the embedded spec/data tags carry attributes so
   the test harness's extraction regex skips them.
-- **`scripts/compile-spec.mjs`** — author-time: inlines engine + spec (+ data)
-  into one self-contained HTML. It parses the spec with the *same* `engine.js`
-  (under `node:vm`), so author-time and runtime YAML parsing are identical. JSON
-  payloads are embedded with `</` → `<\/` so a value containing `</script>` can
-  never close the tag early.
+- **`scripts/compile-spec.mjs`** — author-time: inlines the selected theme pack +
+  engine + spec (+ data) into one self-contained HTML. It parses the spec with the
+  *same* `engine.js` (under `node:vm`), so author-time and runtime YAML parsing are
+  identical. JSON payloads are embedded with `</` → `<\/` so a value containing
+  `</script>` can never close the tag early. `--theme <pack>` picks the theme pack
+  to inline (default Cabin); the pack supplies the `--cabin-*` tokens.
 
 ## Spec kinds
 

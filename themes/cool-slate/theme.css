@@ -1,0 +1,25 @@
+/* Cool Slate — an ALTERNATE theme pack proving the contract is interchangeable.
+   It implements the SAME --cabin-* token vocabulary (day + night) as Cabin, but
+   with a cool blue-grey palette and a teal accent instead of warm paper/terracotta.
+   Because every spec-renderer surface styles itself only against --cabin-* tokens,
+   swapping this pack in (--theme cool-slate) re-skins the whole artifact with no
+   other change. Offline / CSP-clean: no @import / @font-face / url(http…). */
+:root, [data-cabin="day"] {
+  --cabin-paper:#EDF1F5; --cabin-paper-2:#E0E7EE; --cabin-paper-3:#CDD8E2; --cabin-paper-inset:#F6F9FC;
+  --cabin-ink:#16202B; --cabin-ink-2:#2C3B49; --cabin-ink-3:#4C5E6E; --cabin-ink-4:#8497A6;
+  --cabin-rule:rgba(20,40,60,0.10); --cabin-rule-2:rgba(20,40,60,0.18); --cabin-rule-strong:rgba(20,40,60,0.30);
+  --cabin-accent:#2F7E8C; --cabin-accent-deep:#1F5C68; --cabin-accent-soft:rgba(47,126,140,0.14); --cabin-accent-wash:rgba(47,126,140,0.06);
+  --cabin-ok:#3E7B5A; --cabin-warn:#B07A2E; --cabin-danger:#B14A47; --cabin-info:#3E6B8C;
+}
+[data-cabin="night"] {
+  --cabin-paper:#0E141A; --cabin-paper-2:#151D25; --cabin-paper-3:#1D2730; --cabin-paper-inset:#121A21;
+  --cabin-ink:#E6EDF3; --cabin-ink-2:#C2CDD7; --cabin-ink-3:#8597A4; --cabin-ink-4:#54626E;
+  --cabin-rule:rgba(190,210,225,0.08); --cabin-rule-2:rgba(190,210,225,0.16); --cabin-rule-strong:rgba(190,210,225,0.28);
+  --cabin-accent:#4FB3C4; --cabin-accent-deep:#2F7E8C; --cabin-accent-soft:rgba(79,179,196,0.16); --cabin-accent-wash:rgba(79,179,196,0.06);
+  --cabin-ok:#5fa37a; --cabin-warn:#d2a24f; --cabin-danger:#cc6e6b; --cabin-info:#6b9ec4;
+}
+:root {
+  --font-serif:'Iowan Old Style','Palatino Linotype',Georgia,serif;
+  --font-sans:-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  --font-mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}

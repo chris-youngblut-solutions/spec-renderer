@@ -6,11 +6,12 @@
 <meta http-equiv="Content-Security-Policy" content="script-src 'sha256-K98kZYhoif+yA51hkfKhIyLUECscZ1qTDdnWuDDkG8s='; style-src 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; connect-src 'none'">
 <title>spec-renderer</title>
 <style>
-/* spec-renderer engine styles.
-   Cabin day/night theme tokens — a small self-contained token set.
-   Fonts fall back to system stacks:
-   no @import, so the file is offline / CSP-clean / single-artifact.
-   Lifted verbatim from eval-dashboard so compiled views render identically. */
+/* Cabin — the DEFAULT theme pack for spec-renderer.
+   The --cabin-* token vocabulary (day + night) + font stacks. This is the
+   reference implementation of the theme-pack contract (see themes/THEMES.md);
+   the same token set the canonical panel-tiling design-system/cabin.css ships.
+   No @import / @font-face / url(http…): packs stay offline / CSP-clean so the
+   compiler can inline them into the single self-contained artifact. */
 :root, [data-cabin="day"] {
   --cabin-paper:#EDE3CF; --cabin-paper-2:#E4D8BE; --cabin-paper-3:#D9C9A8; --cabin-paper-inset:#F4ECDA;
   --cabin-ink:#2A1F18; --cabin-ink-2:#4A3828; --cabin-ink-3:#6B5340; --cabin-ink-4:#9A8770;
@@ -30,6 +31,15 @@
   --font-sans:-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;
   --font-mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
 }
+
+/* spec-renderer engine styles — the WIDGET layer.
+   These rules consume --cabin-* theme tokens but DEFINE none of them: the
+   token vocabulary (day/night palette + font stacks) is supplied by a swappable
+   THEME PACK (themes/<name>/theme.css), inlined ahead of this block by
+   compile-spec.mjs (default pack = Cabin; --theme selects another). Keeping the
+   widget layer token-only — never a literal color — is what makes the theme
+   interchangeable. No external imports, embedded font files, or remote
+   url() references here: offline / CSP-clean / single-artifact. */
 *{box-sizing:border-box}
 body{margin:0;background:var(--cabin-paper);color:var(--cabin-ink);
   font:15px/1.5 var(--font-sans);-webkit-font-smoothing:antialiased}

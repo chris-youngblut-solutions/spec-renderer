@@ -296,8 +296,16 @@ http(s)** — a `file://` page has no usable origin for credentialed cross-origi
 just compile specs/<spec>.yaml out.html                              # a form (no prefill)
 node scripts/compile-spec.mjs specs/<form>.yaml --data vars.json -o out.html   # a form, prefilled (config editor)
 node scripts/compile-spec.mjs specs/<view>.yaml --data data.json -o out.html   # a view (with data)
+node scripts/compile-spec.mjs specs/<spec>.yaml --theme cool-slate -o out.html # pick a theme pack
 node scripts/compile-spec.mjs --blank -o render.html                 # generic "bring your own spec"
 ```
+
+`--theme <pack>` selects the **theme pack** to inline — a bare name (a directory under
+`themes/`, e.g. `cabin` or `cool-slate`), a pack directory, or a direct `.css` file. A
+theme pack supplies the `--cabin-*` token vocabulary the engine's widget CSS consumes;
+the default is Cabin. The widget styles use only tokens, so a conforming pack re-skins the
+whole artifact with no other change. Packs stay offline (no `@import`/web fonts) — the
+compiler rejects one that would break that. See `themes/THEMES.md`.
 
 The output is single-file, offline, and CSP-clean (a hash-pinned `script-src`, and
 `connect-src 'none'` unless a view opts into live data — see **Live data** above). The
@@ -307,8 +315,9 @@ spec or `?spec=URL` (`&data=URL`); it keeps `connect-src` open for that loader b
 hash-pins `script-src`.
 
 Pass `--watch` to recompile on every save while authoring (`just watch <spec> <out>`):
-it compiles once, then rebuilds whenever the spec, the `--data` file, or any engine
-source (`engine.js` / `engine.css` / `engine.html.tmpl`) changes. Saves are debounced
+it compiles once, then rebuilds whenever the spec, the `--data` file, the selected
+theme pack, or any engine source (`engine.js` / `engine.css` / `engine.html.tmpl`)
+changes. Saves are debounced
 (~100 ms); a spec error is logged without stopping the watch. It uses Node's built-in
 `fs.watch` only — no dependencies. `--watch` requires a real spec (not `--blank`).
 

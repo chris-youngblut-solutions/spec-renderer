@@ -10,8 +10,8 @@
  * can never close the tag early; the round-trip JSON.parse restores it.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, watch, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { existsSync, readFileSync, statSync, watch, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import vm from "node:vm";
 
@@ -22,6 +22,55 @@ const ROOT = join(HERE, "..");
 const SPEC_OPEN = '<script id="embedded-spec" type="application/json">';
 const DATA_OPEN = '<script id="embedded-data" type="application/json">';
 const CSP_PLACEHOLDER = "<!--__CSP_META__-->";
+
+/* ── Theme packs ──────────────────────────────────────────────────────────
+ * A theme pack is a CSS artifact providing the `--cabin-*` token vocabulary
+ * (day + night + fonts) — the swappable design system. The compiler inlines the
+ * SELECTED pack's tokens ahead of the engine's widget CSS, so the single output
+ * carries exactly one pack and stays self-contained. Default pack = Cabin. */
+const THEMES_DIR = join(ROOT, "themes");
+const DEFAULT_THEME = "cabin";
+
+/* Resolve a `--theme` value to a pack's CSS file path. Accepts: a bare pack name
+ * under themes/ (e.g. "cabin", "cool-slate" -> themes/<name>/theme.css); a path to
+ * a pack directory (containing theme.css); or a path straight to a .css file.
+ * Throws a clear error if nothing resolves. */
+export function resolveThemePath(theme) {
+  const t = theme == null ? DEFAULT_THEME : String(theme);
+  // bare pack name (no separator, not a .css path) -> bundled pack dir
+  if (!t.includes("/") && !t.endsWith(".css")) {
+    const p = join(THEMES_DIR, t, "theme.css");
+    if (existsSync(p)) return p;
+    throw new Error(`unknown theme pack "${t}" (looked for ${p})`);
+  }
+  const abs = isAbsolute(t) ? t : resolve(t);
+  if (existsSync(abs) && statSync(abs).isDirectory()) {
+    const p = join(abs, "theme.css");
+    if (existsSync(p)) return p;
+    throw new Error(`theme pack dir has no theme.css: ${abs}`);
+  }
+  if (existsSync(abs)) return abs; // a direct .css (or any) file
+  throw new Error(`theme not found: ${t}`);
+}
+
+/* Load + GUARD a theme pack's CSS. A swapped/dropped pack must not be able to
+ * break the offline / CSP-clean invariant, so reject any @import, @font-face, or
+ * url(http(s)://…) — the same three shapes the offline-csp regression test pins.
+ * Returns the CSS text, ready to inline ahead of the widget styles. */
+export function loadThemeCss(theme) {
+  const path = resolveThemePath(theme);
+  const css = readFileSync(path, "utf8");
+  // Guard against the offline/CSP-breaking shapes, but only in REAL CSS — strip
+  // /* */ comments first so a pack may *mention* @font-face etc. in a header.
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  if (/@import\s+(url|['"])/i.test(bare))
+    throw new Error(`theme pack uses @import (breaks offline/CSP): ${path}`);
+  if (/@font-face/i.test(bare))
+    throw new Error(`theme pack uses @font-face (breaks offline/CSP): ${path}`);
+  if (/url\(\s*['"]?(https?:|\/\/)/i.test(bare))
+    throw new Error(`theme pack references an external url() (breaks offline/CSP): ${path}`);
+  return css; // return the ORIGINAL css (comments intact) for inlining
+}
 
 /* load the browser engine's pure API under node:vm (no document => no boot) */
 export function loadEngineApi() {
@@ -43,13 +92,16 @@ function spliceTag(html, openTag, body) {
   return html.slice(0, start + openTag.length) + body + html.slice(end);
 }
 
-/* the template with engine CSS + JS inlined (embeds left empty) */
-function assembleShell() {
+/* the template with the SELECTED theme pack's tokens + engine widget CSS + JS
+ * inlined (embeds left empty). The theme pack is inlined FIRST so its --cabin-*
+ * custom properties are defined before the widget rules that consume them. */
+function assembleShell(theme) {
+  const themeCss = loadThemeCss(theme);
   const css = readFileSync(join(ROOT, "engine.css"), "utf8");
   const js = readFileSync(join(ROOT, "engine.js"), "utf8");
   if (js.indexOf("</scr" + "ipt") >= 0) throw new Error("engine.js contains a literal </script — would break inlining");
   return readFileSync(join(ROOT, "engine.html.tmpl"), "utf8")
-    .replace("/*__ENGINE_CSS__*/", () => css)
+    .replace("/*__ENGINE_CSS__*/", () => themeCss + "\n" + css)
     .replace("/*__ENGINE_JS__*/", () => js);
 }
 
@@ -112,9 +164,9 @@ function injectCsp(html, connect) {
  * connect-src is left UNRESTRICTED (the ?spec=URL / ?data=URL loader fetches
  * arbitrary author-supplied URLs) — but script-src still locks out injected
  * scripts, so a dropped untrusted spec's footer XSS is closed here too. */
-export function compileBlank() { return injectCsp(assembleShell(), null); }
+export function compileBlank(theme) { return injectCsp(assembleShell(theme), null); }
 
-export function compile({ specText, dataText }) {
+export function compile({ specText, dataText, theme }) {
   const api = loadEngineApi();
   const parsed = api.parseSpecText(specText);
   const env = api.parseEnvelope(parsed.data);
@@ -128,7 +180,7 @@ export function compile({ specText, dataText }) {
     const origin = connectSrcFor(env.dataSource.url);
     if (origin) connect = origin;
   }
-  let html = injectCsp(assembleShell(), connect);
+  let html = injectCsp(assembleShell(theme), connect);
   html = spliceTag(html, SPEC_OPEN, escapeForScript(JSON.stringify(env.spec)));
   if (dataText != null) {
     const data = JSON.parse(dataText);
@@ -138,17 +190,18 @@ export function compile({ specText, dataText }) {
 }
 
 function parseArgs(argv) {
-  const a = { spec: null, data: null, out: null, blank: false, watch: false };
+  const a = { spec: null, data: null, out: null, theme: null, blank: false, watch: false };
   for (let i = 0; i < argv.length; i++) {
     const v = argv[i];
     if (v === "--data") a.data = argv[++i];
     else if (v === "-o" || v === "--out") a.out = argv[++i];
+    else if (v === "--theme") a.theme = argv[++i];
     else if (v === "--blank") a.blank = true;
     else if (v === "--watch") a.watch = true;
     else if (!a.spec) a.spec = v;
     else throw new Error("unexpected argument: " + v);
   }
-  if (!a.blank && !a.spec) throw new Error("usage: compile-spec.mjs <spec> [--data data.json] [-o out.html] [--watch]  |  --blank -o render.html");
+  if (!a.blank && !a.spec) throw new Error("usage: compile-spec.mjs <spec> [--data data.json] [--theme pack] [-o out.html] [--watch]  |  --blank [--theme pack] -o render.html");
   return a;
 }
 
@@ -158,7 +211,7 @@ function parseArgs(argv) {
 export function compileOnce(args) {
   const specText = readFileSync(resolve(args.spec), "utf8");
   const dataText = args.data ? readFileSync(resolve(args.data), "utf8") : null;
-  const { html, env } = compile({ specText, dataText });
+  const { html, env } = compile({ specText, dataText, theme: args.theme });
   const out = args.out ? resolve(args.out) : resolve((env.meta.name || "out") + ".html");
   writeFileSync(out, html);
   return { out, bytes: html.length, kind: env.kind, name: env.meta.name };
@@ -195,9 +248,15 @@ export function watchMode(args) {
   };
   const debounced = debounce(rebuild, 100);
 
+  // also watch the SELECTED theme pack so editing the palette recompiles. Resolve
+  // it defensively — a bad --theme just drops it from the watch set (the rebuild
+  // will surface the error itself).
+  let themePath = null;
+  try { themePath = resolveThemePath(args.theme); } catch { themePath = null; }
   const targets = [
     resolve(args.spec),
     args.data ? resolve(args.data) : null,
+    themePath,
     join(ROOT, "engine.js"),
     join(ROOT, "engine.css"),
     join(ROOT, "engine.html.tmpl"),
@@ -226,7 +285,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.blank) {
     if (args.watch) throw new Error("--watch has no inputs to watch with --blank");
-    const html = compileBlank();
+    const html = compileBlank(args.theme);
     const out = args.out ? resolve(args.out) : resolve("render.html");
     writeFileSync(out, html);
     process.stderr.write(`compiled blank renderer -> ${out} (${html.length} bytes)\n`);

@@ -6,10 +6,15 @@
 test:
     node --test tests/*.test.mjs
 
-# compile one spec to a self-contained HTML
+# compile one spec to a self-contained HTML (default theme pack = Cabin)
 #   just compile specs/eval.view.yaml out.html
 compile spec out:
     node scripts/compile-spec.mjs {{spec}} -o {{out}}
+
+# compile one spec with a SELECTED theme pack (bare name, pack dir, or .css file)
+#   just compile-theme specs/survey.form.yaml cool-slate out.html
+compile-theme spec theme out:
+    node scripts/compile-spec.mjs {{spec}} --theme {{theme}} -o {{out}}
 
 # lint a spec against the authoring contract (errors exit nonzero, warnings exit 0)
 #   just validate specs/example-app-env.form.yaml
