@@ -271,6 +271,20 @@ of polling.
 is disabled (data still arrives via the host push). A live dashboard must be **served over
 http(s)** — a `file://` page has no usable origin for credentialed cross-origin fetches.
 
+A shipped, reusable **live-console template** (`specs/live-console.view.yaml`) composes the
+whole catalog into a customer-facing console: a **Scorecard** tab (exec roll-up — pass count,
+total score, hard-gate banner, per-metric rollup, score trend), a **Drilldown** tab (the
+interactive case-table + a before/after regression diff), a **Transcript** tab (the
+plan-act-observe loop), and a **Fleet** tab (latest run per domain). It declares a same-origin
+`x-forge-datasource` (so the compiled file's CSP locks `connect-src` to `'self'`); drop the
+`x-forge-datasource` block and the same spec compiles to a fully offline, double-click console.
+Compile baked or live:
+
+```sh
+node scripts/compile-spec.mjs specs/live-console.view.yaml --data data/eval-sample.json -o live-console.html  # baked
+node scripts/compile-spec.mjs specs/live-console.view.yaml -o live-console.html                               # live (connect-src 'self')
+```
+
 ## Anti-patterns
 
 - **No logic in bindings.** Bindings are lookups, selectors, and named adapter

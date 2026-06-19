@@ -1,0 +1,104 @@
+# live-console.view.yaml — a REUSABLE "live console" VIEW template.
+#
+# One self-contained, no-build, CSP-clean HTML page a customer team can
+# double-click open (offline) OR serve behind a tailnet / access proxy to
+# watch an eval harness LIVE. It composes the FIXED engine widget catalog and
+# the named `eval-scoring` adapter only — there is NO logic in this spec
+# (anti-pattern rules apply): every number is an adapter call, every layout is
+# a flat ordered widget list, every interaction (case filter/sort, transcript
+# step-through, tab nav) is engine-owned.
+#
+# Three audiences, three tabs (plus a fleet roll-up):
+#   - scorecard  -> EXEC: pass count, total score, hard-gate banner, per-metric
+#                   rollup, score-over-runs trend. "Is it green, and trending?"
+#   - drilldown  -> OPERATOR: the interactive case-table (filter + sort) and a
+#                   before/after regression diff. "Which cases moved, and why?"
+#   - transcript -> the plan-act-observe loop for one case. "What did the agent
+#                   actually do?"
+#   - fleet      -> latest run per domain, one card each. "All domains at once."
+#
+# LIVE DATA (opt-in, declarative-only): x-forge-datasource points at a
+# READ-ONLY, root-relative, same-origin endpoint that returns the same
+# {domains: {...}} bundle shape. The compiled file's CSP then locks
+# connect-src to 'self' (no external host, no SQL in the browser, no
+# credential in the artifact). Auth rides the user's own session cookie.
+# Serve live-console.html and /api/eval-data from the same origin behind a
+# tailnet or access proxy.
+#
+# Compile (baked / fully offline — drop the datasource and it's inert):
+#   node scripts/compile-spec.mjs specs/live-console.view.yaml \
+#     --data data/eval-sample.json -o live-console.html
+#
+# Compile (live — connect-src locks to 'self'):
+#   node scripts/compile-spec.mjs specs/live-console.view.yaml -o live-console.html
+#
+kind: view
+x-forge-name: live-console
+title: "Live eval console"
+adapters: [eval-scoring]
+x-forge-datasource:
+  url: /api/eval-data        # root-relative same-origin path -> CSP connect-src 'self'
+  mode: poll                 # poll (default) | sse
+  intervalMs: 15000          # poll cadence; clamped 1s..1h
+  auth: session              # session (user's cookies) | none (network-gated)
+footer: "Live console — metrics come from a read-only internal endpoint (same {domains} bundle the harness emits); the browser issues no SQL and holds no credential. Scoring is owned by the eval-scoring adapter."
+views:
+  - key: scorecard
+    label: "Scorecard"
+    select: {domain: true, run: after, case: false}
+    widgets:
+      - widget: heading
+        value: "$domain"
+      - widget: chips
+        source: card
+        fields: [run_id, backend, model]
+      - widget: stat-cards
+        cards:
+          - value: "eval-scoring.passedCount(card)"
+            denom: "{card.cases.length}"
+            label: "cases passed"
+          - value: "eval-scoring.totalScore(card)"
+            denom: "{card.cases.length}"
+            label: "total score"
+      - widget: hard-gate-banner
+        source: "eval-scoring.hardGateFailures(card)"
+      - widget: metric-rollup
+        source: "eval-scoring.byMetric(card)"
+        caption: "per-metric rollup — mean score (bar) and pass rate"
+      - widget: caption
+        text: "Total score across this domain's runs — updates as the endpoint reports new runs."
+      - widget: trend
+        source: "eval-scoring.scoreTrend(dataset, domain)"
+        caption: "score over runs — oldest → newest"
+  - key: drilldown
+    label: "Drilldown"
+    select: {domain: true, run: both, case: false}
+    widgets:
+      - widget: heading
+        value: "$domain"
+      - widget: caption
+        text: "Filter and sort the latest run's cases, then diff it against an earlier run."
+      - widget: case-table
+        source: after
+      - widget: regression-diff
+        before: before
+        after: after
+  - key: transcript
+    label: "Transcript"
+    select: {domain: true, run: after, case: true}
+    widgets:
+      - widget: heading
+        value: "Transcript"
+      - widget: caption
+        text: "The plan-act-observe loop for the selected case — calls, observed output, and the final answer."
+      - widget: transcript
+        source: transcript
+  - key: fleet
+    label: "Fleet"
+    select: {domain: false, run: false, case: false}
+    widgets:
+      - widget: heading
+        value: "Fleet"
+      - widget: caption
+        text: "Latest run per domain — one engine, N domains, at a glance."
+      - widget: cross-grid
