@@ -35,6 +35,7 @@ watch spec out:
 # data/eval-sample.json is a public agentic-eval-harness snapshot.
 embed:
     node scripts/compile-spec.mjs specs/example-app-env.form.yaml -o example-app-env.html
+    node scripts/compile-spec.mjs specs/config-forge.form.yaml -o config-forge.html
     node scripts/compile-spec.mjs specs/survey.form.yaml -o survey.html
     node scripts/compile-spec.mjs specs/settings.form.yaml -o settings.html
     node scripts/compile-spec.mjs specs/eval.view.yaml --data data/eval-sample.json -o eval-dashboard.html
@@ -52,4 +53,4 @@ check: test
 # build the release artifacts (the compiled single-file renderers) into dist/
 build: embed
     mkdir -p dist
-    cp example-app-env.html survey.html settings.html eval-dashboard.html example-live.html render.html dist/
+    cp example-app-env.html config-forge.html survey.html settings.html eval-dashboard.html example-live.html render.html dist/

@@ -1,0 +1,11 @@
+{
+  "ADMIN_USER": "operator",
+  "MGMT_IP": "10.0.0.10",
+  "MGMT_GATEWAY": "10.0.0.1",
+  "HOSTNAME": "node-01",
+  "SECURE_BOOT": "disabled",
+  "POWER_PROFILE": "performance",
+  "STORAGE_MOUNT": "/mnt/data",
+  "ALERT_EMAIL": "ops@example.com",
+  "METRICS_ENDPOINT": "http://collector.example.internal:9090"
+}

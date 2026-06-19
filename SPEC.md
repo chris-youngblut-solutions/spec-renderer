@@ -55,7 +55,7 @@ repetition over an alternation.) Values still travel as strings, so quote numeri
 
 | keyword | values | effect |
 |---|---|---|
-| `status` | `known` / `default` / `fill` / `scoped-out` | badge + lifecycle. `scoped-out` excludes the field from rendering and from all exports. |
+| `status` | `known` / `default` / `fill` / `scoped-out` | badge + lifecycle. `scoped-out` renders the field as a non-editable "excluded" placeholder (no input, no badge, counted in the group's "(N scoped-out)" header) and omits it from every export. |
 | `secret` | `true` | routes the field to the secrets export and renders a password input. |
 | `group` | a group id | which group the field renders under. |
 | `x-forge-multiline` | `true` | render a multi-line `<textarea>` for a string field (alias for `format: textarea`). |
@@ -125,9 +125,16 @@ and never call out. No spec keyword controls this; it is automatic and host-gate
 
 ### Example gallery
 
-Two shipped form specs demonstrate the form feature set end-to-end (compiled into
+Three shipped form specs demonstrate the form feature set end-to-end (compiled into
 `dist/` by `just build`):
 
+- `specs/config-forge.form.yaml` — the **config-forge** ancestor folded in: a multi-phase
+  infrastructure bootstrap config-intake form exercising the full `known`/`default`/`fill`/
+  `scoped-out` status lifecycle, `secret` routing, `ipv4`/`email`/`uri`/`enum`/`integer`
+  field types with bounds, and the annotated-env runbook output. Pair it with
+  `specs/config-forge.vars.json` via `--data` to get config-forge's **config-editor** mode
+  (defaults prefilled, operator edits). Generic and public-safe — placeholder defaults only.
+  Proves spec-renderer subsumes config-forge's config-intake core with zero engine changes.
 - `specs/survey.form.yaml` — a feedback survey: an `enum`, a `boolean` checkbox, an
   `array` multi-select, a `textarea` long answer, and a follow-up field gated by
   `x-forge-when`, organized into groups.

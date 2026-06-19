@@ -1,0 +1,208 @@
+# config-forge.form.yaml — the config-forge ancestor, folded into spec-renderer as a
+# first-class FORM example. config-forge was a single-file, no-build, dependency-free
+# config-intake renderer (groups + fields, a status lifecycle, secret routing, scoped-out
+# exclusion) that drove infrastructure bootstrap. spec-renderer SUBSUMES it: the same
+# config-intake shape is here authored in the documented form-spec subset and compiled by
+# scripts/compile-spec.mjs with ZERO engine changes — proving the renderer generalizes
+# config-forge's form core.
+#
+# This is a GENERIC, public-safe cluster-node bootstrap. No real credentials, hostnames,
+# service tags, or internal addresses — placeholder defaults only. It exercises the same
+# feature surface config-forge used: multi-group phases, the known/default/fill/scoped-out
+# status lifecycle, secret fields routed to the secrets export, ipv4 / email / uri / enum /
+# integer field types with bounds, and scoped-out fields excluded from every export.
+"$schema": "https://json-schema.org/draft/2020-12/schema"
+type: "object"
+x-forge-kind: "form"
+x-forge-name: "node-bootstrap"
+title: "Cluster node bootstrap"
+x-forge-version: "1"
+# annotated-env carries each field's description + section headers — the form config-forge
+# produced for an operator runbook.
+x-forge-outputs: ["env", "json", "env-annotated"]
+x-forge-groups:
+  - id: "p0-creds"
+    title: "Phase 0 — Admin credentials"
+    note: "First-contact admin account; rotate after bootstrap."
+  - id: "p1-mgmt-net"
+    title: "Phase 1 — Management network"
+  - id: "p2-host"
+    title: "Phase 2 — Host identity & BIOS"
+  - id: "p3-storage"
+    title: "Phase 3 — Storage"
+  - id: "p4-monitoring"
+    title: "Phase 4 — Monitoring & alerting"
+    note: "Optional — wire up only if a collector is reachable."
+  - id: "p5-deferred"
+    title: "Phase 5 — Deferred (scoped out)"
+    note: "Re-enable when the relevant hardware work resumes."
+required:
+  ["ADMIN_USER", "ADMIN_PASS", "MGMT_IP", "MGMT_GATEWAY", "HOSTNAME", "STORAGE_MOUNT"]
+properties:
+  # --- Phase 0: credentials (one known factory default, the rest filled; secrets routed) ---
+  ADMIN_USER:
+    type: "string"
+    title: "Admin user"
+    description: "New admin account created during bootstrap."
+    default: "admin"
+    status: "default"
+    group: "p0-creds"
+  ADMIN_PASS:
+    type: "string"
+    title: "Admin password"
+    description: "Set a strong password; routed to the secrets export, never the public env."
+    secret: true
+    status: "fill"
+    group: "p0-creds"
+  FACTORY_USER:
+    type: "string"
+    title: "Factory default user"
+    description: "Vendor factory account used for first contact, then disabled."
+    default: "root"
+    status: "known"
+    group: "p0-creds"
+
+  # --- Phase 1: management network (ipv4 validators, an optional field, a VLAN integer) ---
+  MGMT_IP:
+    type: "string"
+    format: "ipv4"
+    title: "Management IP"
+    description: "Static management address for this node."
+    status: "fill"
+    group: "p1-mgmt-net"
+  MGMT_NETMASK:
+    type: "string"
+    format: "ipv4"
+    title: "Netmask"
+    default: "255.255.255.0"
+    status: "known"
+    group: "p1-mgmt-net"
+  MGMT_GATEWAY:
+    type: "string"
+    format: "ipv4"
+    title: "Gateway"
+    status: "fill"
+    group: "p1-mgmt-net"
+  MGMT_DNS:
+    type: "string"
+    format: "ipv4"
+    title: "Primary DNS"
+    default: "1.1.1.1"
+    status: "default"
+    group: "p1-mgmt-net"
+  MGMT_VLAN_ID:
+    type: "integer"
+    title: "Management VLAN tag"
+    description: "802.1Q VLAN id for the management interface."
+    minimum: 1
+    maximum: 4094
+    default: "10"
+    status: "known"
+    group: "p1-mgmt-net"
+  MGMT_TIMEZONE:
+    type: "string"
+    title: "Timezone"
+    description: "IANA timezone, e.g. America/Chicago."
+    default: "UTC"
+    status: "default"
+    group: "p1-mgmt-net"
+
+  # --- Phase 2: host identity + BIOS (enums = config-forge's most common field) ---
+  HOSTNAME:
+    type: "string"
+    title: "Hostname"
+    description: "Short hostname for this node."
+    pattern: "^[a-z][a-z0-9-]{0,62}$"
+    status: "fill"
+    group: "p2-host"
+  BOOT_MODE:
+    type: "string"
+    title: "Boot mode"
+    enum: ["uefi", "bios"]
+    default: "uefi"
+    status: "known"
+    group: "p2-host"
+  VIRTUALIZATION:
+    type: "string"
+    title: "CPU virtualization"
+    description: "Enable hardware virtualization extensions (VT-x / AMD-V)."
+    enum: ["enabled", "disabled"]
+    default: "enabled"
+    status: "known"
+    group: "p2-host"
+  SECURE_BOOT:
+    type: "string"
+    title: "UEFI Secure Boot"
+    description: "Operator decision — leave disabled unless attestation is required."
+    enum: ["enabled", "disabled"]
+    default: "disabled"
+    status: "fill"
+    group: "p2-host"
+  POWER_PROFILE:
+    type: "string"
+    title: "Power profile"
+    enum: ["performance", "balanced", "powersave"]
+    default: "balanced"
+    status: "fill"
+    group: "p2-host"
+
+  # --- Phase 3: storage (raid level enum, an integer pool size, a mount path) ---
+  RAID_LEVEL:
+    type: "string"
+    title: "RAID level"
+    enum: ["raid0", "raid1", "raid5", "raid6", "raid10"]
+    default: "raid6"
+    status: "known"
+    group: "p3-storage"
+  POOL_SIZE_GB:
+    type: "integer"
+    title: "Storage pool size (GB)"
+    description: "Usable capacity to allocate to the shared pool."
+    minimum: 1
+    maximum: 1048576
+    default: "1024"
+    status: "default"
+    group: "p3-storage"
+  STORAGE_MOUNT:
+    type: "string"
+    title: "Mount point"
+    default: "/mnt/data"
+    status: "fill"
+    group: "p3-storage"
+
+  # --- Phase 4: monitoring (uri + email validators, an optional secret) ---
+  METRICS_ENDPOINT:
+    type: "string"
+    format: "uri"
+    title: "Metrics collector URL"
+    description: "e.g. http://collector.internal:9090 — leave blank to skip."
+    status: "default"
+    group: "p4-monitoring"
+  ALERT_EMAIL:
+    type: "string"
+    format: "email"
+    title: "Alert email"
+    description: "Where node alerts are delivered."
+    status: "fill"
+    group: "p4-monitoring"
+  SNMP_COMMUNITY:
+    type: "string"
+    title: "SNMP community string"
+    description: "Optional; routed to the secrets export when set."
+    secret: true
+    status: "fill"
+    group: "p4-monitoring"
+
+  # --- Phase 5: deferred work, scoped-out (rendered nowhere, excluded from every export) ---
+  GPU_PASSTHROUGH_SLOT:
+    type: "string"
+    title: "GPU passthrough slot"
+    description: "PCIe slot mapping — deferred until GPU work resumes."
+    status: "scoped-out"
+    group: "p5-deferred"
+  DAS_INTERFACE:
+    type: "string"
+    title: "DAS interface"
+    description: "Direct-attached storage — deferred to an in-person assessment."
+    status: "scoped-out"
+    group: "p5-deferred"
