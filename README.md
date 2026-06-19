@@ -89,8 +89,11 @@ Shipped public at 0.1.0 (SemVer; Decision 5). Built: the single-file engine
 (`validate-spec.mjs`) and a JSON-Schema → form-spec converter
 (`jsonschema-to-spec.mjs`), the `render.html` drop-in renderer, the MCP Apps server
 (`mcp-server/server.mjs`, SEP-1865, with form submit-back), and the dependency-free
-`node:test` suite. Shipped examples: the web-app `.env` form, a survey form, a
-settings panel, and the agentic-eval-harness dashboard.
+`node:test` suite. Shipped examples (the two ancestors spec-renderer generalizes plus a
+feature gallery): a `config-forge` infrastructure-bootstrap **form** and the
+agentic-eval-harness **view** dashboard — the config-intake renderer and the eval viewer
+that spec-renderer folds into one engine — alongside a web-app `.env` form, a survey form,
+and a settings panel.
 
 ## License
 
