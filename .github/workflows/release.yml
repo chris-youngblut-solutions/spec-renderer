@@ -105,7 +105,7 @@ jobs:
           path: gh-release/
 
       - name: Generate changelog with git-cliff
-        uses: orhun/git-cliff-action@v4.4.2
+        uses: orhun/git-cliff-action@v4.8.0
         with:
           config: cliff.toml
           args: --latest --strip header

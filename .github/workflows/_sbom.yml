@@ -31,7 +31,7 @@ jobs:
           path: artifacts/
 
       - name: Install syft
-        uses: anchore/sbom-action/download-syft@v0.17.7
+        uses: anchore/sbom-action/download-syft@v0.24.0
 
       - name: Generate SPDX SBOM
         run: syft scan dir:. -o spdx-json=sbom.spdx.json
